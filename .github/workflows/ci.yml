@@ -168,8 +168,13 @@ jobs:
         # release of the exact version. `--locked` is not used: the published
         # lockfile pins dependencies that no longer compile on current
         # toolchains, and the pijul version is what the contract is pinned to.
+        # `libsodium-dev` is a compile-time input of `libsodium-sys`, which the
+        # runner image does not ship: without it `cargo install` fails in the
+        # crate's build script rather than in any Tanseki code.
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsodium-dev pkg-config
           cargo install --root "$HOME/.local" "pijul" --version "=$PIJUL_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
@@ -311,7 +316,7 @@ jobs:
       # `:service:installDist` all exist together, so a filesystem scan of the
       # repository cannot see a CVE in any of them.
       - name: Scan the image for vulnerabilities
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: tanseki-ci
           format: table
@@ -321,7 +326,7 @@ jobs:
           exit-code: "1"
 
       - name: Scan the image for secrets and misconfiguration
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: tanseki-ci
           format: table
@@ -378,7 +383,7 @@ jobs:
         # build context; this checks the instructions themselves (an unpinned
         # `apt-get install`, a missing `--no-install-recommends`, a secret in a
         # build argument) against the upstream rule set.
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: config
           scan-ref: service/Dockerfile
@@ -392,7 +397,7 @@ jobs:
         run: ./gradlew checkContainerContract --no-daemon
 
       - name: Scan dependencies and configuration
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: fs
           scan-ref: .

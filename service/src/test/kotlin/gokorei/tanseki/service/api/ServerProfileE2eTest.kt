@@ -24,6 +24,7 @@ import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
+import org.testcontainers.utility.DockerImageName
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -52,7 +53,9 @@ class ServerProfileE2eTest {
 
         val pg =
             PostgreSQLContainer(
-                "postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+                DockerImageName
+                    .parse("postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
+                    .asCompatibleSubstituteFor("postgres")
             ).withDatabaseName("tanseki")
                 .withUsername("tanseki")
                 .withPassword("tanseki")

@@ -18,6 +18,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.utility.DockerImageName
 import java.nio.file.Path
 import kotlin.time.Instant
 
@@ -70,7 +71,9 @@ class ServerCompositionTest {
         @JvmStatic
         val postgres: PostgreSQLContainer<*> =
             PostgreSQLContainer(
-                "postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+                DockerImageName
+                    .parse("postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
+                    .asCompatibleSubstituteFor("postgres")
             ).withDatabaseName("tanseki")
                 .withUsername("tanseki")
                 .withPassword("tanseki")

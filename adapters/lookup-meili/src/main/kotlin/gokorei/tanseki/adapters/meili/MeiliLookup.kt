@@ -226,6 +226,10 @@ class MeiliLookup private constructor(
     override fun searchText(q: String, filters: Filters, limit: Int): List<Hit> =
         runBlocking {
             ensureReady()
+            // A blank `q` with no filters is not a question — same rule as the
+            // Lucene adapter (`Filters.isSearching`). Without this, Meilisearch
+            // answers an empty `q` with every document (placeholder search).
+            if (q.isBlank() && !filters.isSearching) return@runBlocking emptyList()
             val payload =
                 buildJsonObject {
                     put("q", q)

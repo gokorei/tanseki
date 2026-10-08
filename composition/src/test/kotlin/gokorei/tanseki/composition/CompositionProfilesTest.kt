@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -23,6 +24,11 @@ class CompositionProfilesTest {
 
     @Test
     fun `vault mode selects the file store`() {
+        // Vault mode shells out to the `pijul` binary on open, so without one
+        // this is an environment gap rather than a product defect — skipped, in
+        // the same way container suites skip without Docker. The pijul job
+        // covers a real vault through the /v1 seam instead.
+        assumeTrue(pijulAvailable(), "pijul binary is required to open vault mode")
         val vault = Files.createDirectories(tmp.resolve("vault"))
         Compositions.openLocal(vault, Profile.VAULT, tmp.resolve("index")).use { composition ->
             assertTrue(composition.store is FileContextStore)
@@ -286,5 +292,15 @@ class CompositionProfilesTest {
         assertThrows(IllegalArgumentException::class.java) {
             TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_TRUST_PROXY to "sometimes"))
         }
+    }
+
+    private fun pijulAvailable(): Boolean {
+        // Same resolution as PijulCliClient: explicit binary env first, `pijul`
+        // on PATH otherwise. A probe, not a version check — vault mode only
+        // needs the binary to exist here; the pijul job pins the version.
+        val binary = System.getenv("TANSEKI_PIJUL_BINARY") ?: "pijul"
+        return runCatching {
+            ProcessBuilder(binary, "--version").redirectErrorStream(true).start().waitFor() == 0
+        }.getOrDefault(false)
     }
 }
