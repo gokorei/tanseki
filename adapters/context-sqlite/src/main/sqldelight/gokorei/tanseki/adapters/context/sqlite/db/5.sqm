@@ -1,0 +1,4 @@
+ALTER TABLE projection_operations ADD COLUMN dead_lettered INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS projection_operations_dead_lettered_idx
+    ON projection_operations(dead_lettered, created_at, id);

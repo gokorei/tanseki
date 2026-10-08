@@ -1,0 +1,47 @@
+-- Append-only provenance. Normalized history across backends; Pijul's patch DAG
+-- maps onto these rows in the FileStore.
+
+CREATE TABLE revisions (
+    doc_id       TEXT    NOT NULL,
+    revision     TEXT    NOT NULL,
+    author       TEXT    NOT NULL,
+    message      TEXT    NOT NULL,
+    content_hash TEXT    NOT NULL,
+    content      TEXT,
+    created_at   INTEGER NOT NULL,
+    deps         TEXT    NOT NULL DEFAULT '[]',
+    PRIMARY KEY (doc_id, revision)
+);
+
+selectForDoc:
+SELECT * FROM revisions WHERE doc_id = ? ORDER BY created_at, revision;
+
+selectForDocPage:
+SELECT * FROM revisions WHERE doc_id = ? ORDER BY created_at, revision LIMIT ? OFFSET ?;
+
+countForDoc:
+SELECT count(*) FROM revisions WHERE doc_id = ?;
+
+selectOne:
+SELECT * FROM revisions WHERE doc_id = ? AND revision = ?;
+
+insert:
+INSERT INTO revisions(
+    doc_id, revision, author, message, content_hash, content, created_at, deps
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+insertOrIgnore:
+INSERT OR IGNORE INTO revisions(
+    doc_id, revision, author, message, content_hash, content, created_at, deps
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- History follows the document. The ledger is keyed by doc_id, so a rename that
+-- did not move these rows would leave the past behind under an id nothing
+-- queries any more.
+retargetDoc:
+UPDATE OR REPLACE revisions SET doc_id = ? WHERE doc_id = ?;
+
+deleteForDoc:
+DELETE FROM revisions WHERE doc_id = ?;

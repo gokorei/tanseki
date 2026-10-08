@@ -1,0 +1,26 @@
+# Maximum number of entries config/detekt/baseline.xml may hold.
+#
+# The baseline is a ratchet, not a parking lot: every entry is a known finding
+# that still has an owner, and lowering this number is the way to force one out.
+# It is checked by `./gradlew detektBaselineBudget` and is enforced in CI.
+#
+# Regenerate with `./gradlew detektBaseline` only for an intentional change to the
+# lint surface, and lower this budget whenever a baselined finding is fixed. The
+# count rose from 5 to 33 when CVF87BFP re-enabled UnusedPrivateMember and
+# TooManyFunctions: the new entries are the debt those rules had been hiding, and
+# the budget is pinned at that floor so it can only ratchet down.
+#
+# Current entries (32), by rule:
+#   - TooManyFunctions (30): god classes and wide contracts, owned by YM63VJCV.
+#     FileContextStore and SqliteContextStore are now thin facades (their LargeClass
+#     findings are gone); each still registers TooManyFunctions purely because the
+#     facade must implement both ContextStore and ProjectionOperationStore (~34
+#     one-line delegates), which the wide-contract budget explicitly tolerates.
+#   - LargeClass (0): FileContextStore and SqliteContextStore both decomposed below
+#     the threshold; no class carries a suppressed/flagged LargeClass finding.
+#   - UnusedPrivateMember (1): tracked dead code
+#   - LoopWithTooManyJumpStatements (1): WhitespaceTokenizer
+#
+# Generated SDK sources are deliberately absent: `sdk/generated/**` skips the
+# convention plugin and is never analysed, so it must never be baselined.
+32

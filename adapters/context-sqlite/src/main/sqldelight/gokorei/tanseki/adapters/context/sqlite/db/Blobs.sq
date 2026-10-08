@@ -1,0 +1,14 @@
+-- Content-addressed blob metadata. Identical across adapters so attachments
+-- never diverge; blob bytes are stored content-addressed by the adapter.
+
+CREATE TABLE blobs (
+    hash      TEXT    NOT NULL PRIMARY KEY,
+    algorithm TEXT    NOT NULL DEFAULT 'sha256',
+    size      INTEGER NOT NULL
+);
+
+selectByHash:
+SELECT * FROM blobs WHERE hash = ?;
+
+upsert:
+INSERT OR REPLACE INTO blobs(hash, algorithm, size) VALUES (?, ?, ?);

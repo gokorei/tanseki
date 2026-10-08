@@ -1,0 +1,13 @@
+-- Blob bytes for library mode. Kept separate from the blob metadata table so the
+-- metadata contract stays backend-neutral and content stays content-addressed.
+
+CREATE TABLE blob_content (
+    hash  TEXT NOT NULL PRIMARY KEY,
+    bytes BLOB NOT NULL
+);
+
+selectContent:
+SELECT bytes FROM blob_content WHERE hash = ?;
+
+insertContent:
+INSERT OR REPLACE INTO blob_content(hash, bytes) VALUES (?, ?);

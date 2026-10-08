@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+sdk-drift/
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+
+# OS
+.DS_Store
+
+# Local data
+*.db
+*.sqlite
+*.log
+
+# Tanseki runtime state. `.tanseki/` is derived (index, socket, lock) and `.pijul/` is
+# the Pijul repository the vault mode initializes, so both belong to a vault on
+# disk, never to this source tree. Ignoring them keeps `git add .` in a vault
+# working copy from capturing another vault's documents or its history.
+.tanseki/
+.pijul/
+
+# Secrets and credentials. Tanseki is configured entirely through the environment,
+# so none of these are ever legitimate inputs to the build.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# CI scratch space (daemon logs, live-smoke vaults)
+.ci/
+
+# Distribution archives
+dist/
+.venv/

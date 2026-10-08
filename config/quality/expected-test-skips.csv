@@ -1,0 +1,30 @@
+# Suites that are expected to be entirely skipped in a normal `./gradlew build`,
+# enforced by `./gradlew checkUnexpectedTestSkips`.
+#
+# Format: <fully-qualified suite class>,<reason>
+#
+# A suite belongs here only when skipping it is the correct behaviour on a machine
+# without the external dependency. Anything NOT listed that skips entirely fails
+# the build, so a suite cannot quietly stop running by gaining an assumption, a
+# `@Disabled`, or a tag — the failure mode this ledger exists to prevent.
+#
+# Skips *within* a suite are not governed here: a capability-gated assumption
+# (`supportsHistoryImport`, `supportsRestore`) legitimately skips some tests
+# on an adapter that does not offer that capability, and those are the adapter's
+# own contract tests rather than missing coverage. Only a suite where every test
+# skipped is treated as "this suite did not run".
+#
+# The container-backed suites below are separately *required* by
+# `checkRequiredIntegrationCoverage` when run with
+# `-Ptanseki.runIntegrationTests=true`, so this ledger and that gate together say
+# both halves: skipped here on purpose, executed there on purpose.
+gokorei.tanseki.adapters.postgres.PostgresContextStoreContractTest,needs Docker for a Postgres instance; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.postgres.PostgresContextStoreRetentionTest,needs Docker for a Postgres instance; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.postgres.PostgresContextStorePathTest,needs Docker for a Postgres instance; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.postgres.PostgresSchemaMigrationTest,needs Docker for a Postgres instance; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.composition.ServerCompositionTest,needs Docker for the Postgres and Meilisearch server profile; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.meili.MeiliLookupContractTest,needs a running Meilisearch; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.meili.MeiliLookupIntegrationTest,needs a running Meilisearch; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.adapters.pijul.PijulCliClientRealBinaryTest,needs the pinned pijul binary on PATH; exercised by the pijul job
+gokorei.tanseki.cli.transfer.CrossProfileTransferE2eTest,needs Docker for the Postgres hop; required by checkRequiredIntegrationCoverage in the integration job
+gokorei.tanseki.service.api.ServerProfileE2eTest,needs Docker for the Postgres and Meilisearch server profile; required by checkRequiredIntegrationCoverage in the integration job

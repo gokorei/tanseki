@@ -1,0 +1,38 @@
+build:
+  maxIssues: 0
+
+complexity:
+  # LongMethod stays off until YM63VJCV decomposes the god classes: baselining a
+  # method that is about to be split would only have to be re-baselined. That is
+  # a deliberate decision recorded here, not a silent omission.
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  # Re-enabled by CVF87BFP. Class size is the diagnostic the review depends on to
+  # surface the god classes, so it must be active; the current findings are
+  # carried as tracked debt in the shared baseline and the budget ratchets them
+  # down.
+  TooManyFunctions:
+    active: true
+
+style:
+  # MagicNumber stays off: detekt cannot distinguish a meaningful constant from an
+  # incidental literal, and this codebase names the literals that matter. Revisit
+  # if that stops being true.
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    active: false
+  ReturnCount:
+    active: false
+  # Re-enabled by CVF87BFP. A dead private member is invisible otherwise; the
+  # existing ones are baselined as debt to be removed deliberately.
+  UnusedPrivateMember:
+    active: true
+  WildcardImport:
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false

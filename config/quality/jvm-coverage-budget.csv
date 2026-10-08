@@ -1,0 +1,44 @@
+# Per-module JVM line-coverage floors, enforced by `./gradlew coverageBudget`.
+#
+# Format: <gradle project path>,<minimum line coverage percent>[,integration]
+#
+# The floor is measured with the JaCoCo version pinned in
+# `config/quality/jacoco-version.txt`, over that module's own `test` task only.
+#
+# Floors are set from the default `./gradlew build` configuration, which is the
+# strictest one: container-backed contracts (PostgreSQL, Meilisearch) are skipped
+# unless Docker / the integration flag is available, so running the integration
+# jobs in CI can only raise these numbers. Each floor sits a few points under the
+# measured value to absorb environment noise, never above it.
+#
+# `integration` marks a module whose contracts only run with Docker: its floor is
+# reported but not enforced unless `-Ptanseki.runIntegrationTests=true` is passed
+# (the CI integration jobs do). The floor is deliberately low for those — its job
+# is to catch "the container suite silently did not run" (which measures 0%), not
+# to claim a coverage level nobody has measured yet.
+#
+# Rules:
+#   - every JVM module with `src/main/kotlin` needs exactly one row; a missing row
+#     or a row for a module that reports nothing both fail the gate;
+#   - raise a floor only together with the tests that earn it;
+#   - lowering a floor is a deliberate decision and must be called out in review;
+#   - re-measure with `./gradlew coverageBudget` and read
+#     `build/reports/coverageBudget/coverage.csv` before editing a number.
+:core:domain,53
+:core:text,83
+:core:ports,21
+:core:application,89
+:adapters:context-file,88
+:adapters:context-plain,90
+:adapters:context-sqlite,80
+:adapters:lookup-lucene,92
+:adapters:lookup-meili,44
+:adapters:pijul-cli,82
+:adapters:watcher-os,90
+:adapters:embedder-onnx,58
+:adapters:context-postgres,25,integration
+:composition,82
+:service,78
+:cli,60
+:testkit,70
+:sdk:generated:kotlin,40

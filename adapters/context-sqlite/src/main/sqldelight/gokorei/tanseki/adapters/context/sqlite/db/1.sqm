@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS projection_operations (
+    id                 TEXT    PRIMARY KEY,
+    document_id        TEXT    NOT NULL,
+    revision           TEXT    NOT NULL,
+    content_hash       TEXT    NOT NULL,
+    kind               TEXT    NOT NULL,
+    edge_version       TEXT    NOT NULL,
+    projection_version TEXT    NOT NULL,
+    created_at         INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS projection_operations_pending_idx
+    ON projection_operations(created_at, id);

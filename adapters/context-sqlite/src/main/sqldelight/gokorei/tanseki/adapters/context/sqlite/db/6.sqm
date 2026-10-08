@@ -1,0 +1,8 @@
+ALTER TABLE projection_operations ADD COLUMN lease_owner TEXT;
+
+ALTER TABLE projection_operations ADD COLUMN lease_token TEXT;
+
+ALTER TABLE projection_operations ADD COLUMN lease_expires_at INTEGER;
+
+CREATE INDEX IF NOT EXISTS projection_operations_lease_idx
+    ON projection_operations(lease_expires_at);

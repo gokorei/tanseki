@@ -1,0 +1,2906 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "Tanseki API",
+    "description" : "Canonical Tanseki `/v1` knowledge-store seam: documents, search and traversal.",
+    "license" : {
+      "name" : "Apache-2.0",
+      "url" : "https://www.apache.org/licenses/LICENSE-2.0"
+    },
+    "version" : "1.0.0"
+  },
+  "externalDocs" : {
+    "url" : "/"
+  },
+  "servers" : [ ],
+  "tags" : [ ],
+  "paths" : {
+    "/v1/health" : {
+      "get" : {
+        "tags" : [ "health" ],
+        "summary" : "Liveness check",
+        "description" : "Unauthenticated process-only liveness probe.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthDto"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false
+      }
+    },
+    "/v1/live" : {
+      "get" : {
+        "tags" : [ "health" ],
+        "summary" : "Liveness check",
+        "description" : "Unauthenticated process-only liveness probe.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthDto"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false
+      }
+    },
+    "/v1/ready" : {
+      "get" : {
+        "tags" : [ "health" ],
+        "summary" : "Readiness check",
+        "description" : "Unauthenticated dependency, projection, backlog, and watcher readiness.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false
+      }
+    },
+    "/v1/metrics" : {
+      "get" : {
+        "tags" : [ "metrics" ],
+        "summary" : "Read operational metrics",
+        "description" : "Authoritative current projection, backlog, watcher, and latency signals.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "collection",
+          "in" : "query",
+          "description" : "Collection scope for this metrics read.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents" : {
+      "get" : {
+        "tags" : [ "documents" ],
+        "summary" : "List documents",
+        "description" : "Paginated document references, optionally scoped to a collection.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "collection",
+          "in" : "query",
+          "description" : "Collection to list.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "pathPrefix",
+          "in" : "query",
+          "description" : "Only documents whose path starts with this prefix, for building a folder tree.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "description" : "Page size (1..500, default 50).",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        }, {
+          "name" : "offset",
+          "in" : "query",
+          "description" : "Zero-based offset. Retained for existing clients; prefer `cursor`.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "description" : "Opaque token from a previous response's `nextCursor`; resumes after it. Mutually exclusive with `offset`.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DocumentListResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:get" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Get a document",
+        "description" : "Fetch one document by id. Ids are path-derived and contain '/', so they travel in the body.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id and optional collection.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/GetDocumentRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : {
+              "ETag" : {
+                "description" : "Current document revision.",
+                "required" : true,
+                "deprecated" : false,
+                "schema" : {
+                  "type" : "string",
+                  "title" : "String"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DocumentDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:query" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Get many documents",
+        "description" : "Batch-fetch documents by id; missing ids are omitted from the response.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document ids and optional collection.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/QueryDocumentsRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/QueryDocumentsResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:upsert" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Create or update a document",
+        "description" : "Idempotent on content hash. A supplied contentHash is a precondition on the existing document content. Honours `If-Match` (optimistic concurrency) and `Idempotency-Key` (response replay).",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "If-Match",
+          "in" : "header",
+          "description" : "Current revision ETag required for this write.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "description" : "Request-bound key used to reserve and replay a write.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Complete create-or-update request.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/UpsertDocumentRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : {
+              "ETag" : {
+                "description" : "Revision produced by this write.",
+                "required" : true,
+                "deprecated" : false,
+                "schema" : {
+                  "type" : "string",
+                  "title" : "String"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "412" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:delete" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Delete a document",
+        "description" : "Tombstones the document while preserving its history; supports `If-Match` and `Idempotency-Key`.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "If-Match",
+          "in" : "header",
+          "description" : "Current revision ETag required for this write.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "description" : "Request-bound key used to reserve and replay a write.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id and optional deletion metadata.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/DeleteDocumentRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : {
+              "ETag" : {
+                "description" : "Deletion revision produced by this write.",
+                "required" : true,
+                "deprecated" : false,
+                "schema" : {
+                  "type" : "string",
+                  "title" : "String"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeleteResult"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "412" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:history" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Document history",
+        "description" : "Revision list including the deletion revision, oldest-first and paginated.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id, collection, and pagination bounds.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/HistoryRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HistoryResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:traverse" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Traverse the graph",
+        "description" : "Walk typed edges (links-to, references, embeds, mentions) from a document. `rel` names a relationship type, not a frontmatter key: `files`, `repo`, `pr`, `jira` and `author` say where an edge comes from and are rejected with a 400 naming the four valid values rather than answered with an empty list.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id, relationship, depth, and collection.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/TraverseRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TraverseResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:backlinks" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "List documents linking to a document",
+        "description" : "Return the documents that link TO a document, optionally narrowed to one relationship (links-to, references, embeds, mentions). The reverse of documents:traverse.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id, optional relationship, and collection.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/BacklinksRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BacklinksResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/events" : {
+      "get" : {
+        "tags" : [ "events" ],
+        "summary" : "Subscribe to committed document changes (SSE)",
+        "description" : "A `text/event-stream` of changes that have actually become searchable. Each event carries the feed's own `sequence`, so a client that reconnects can send the last one it saw as `Last-Event-ID` (or `?after=`) and receive only what it missed. A sequence that has aged out of the retained window yields a `resync` event instead of a silently incomplete stream.\n\nThe feed is process-local: a daemon restart resets sequences, so a client resuming across one must reload rather than resume.\n\nEvents are scoped to the collections the credential may read; a document outside that scope never appears, not even as a gap.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : {
+              "Content-Type" : {
+                "description" : "Always text/event-stream.",
+                "required" : true,
+                "deprecated" : false,
+                "schema" : {
+                  "type" : "string",
+                  "title" : "String"
+                }
+              }
+            },
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "501" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/blobs" : {
+      "post" : {
+        "tags" : [ "attachments" ],
+        "summary" : "Upload an attachment",
+        "description" : "Stores the request body verbatim and returns its content-addressed reference. Uploading identical bytes twice yields the same reference. The body is read as raw binary, never base64 inside JSON.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Raw attachment bytes, read verbatim. At most 33554432 bytes.",
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "format" : "binary"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BlobRefDto"
+                }
+              }
+            }
+          },
+          "413" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/blobs/{hash}" : {
+      "get" : {
+        "tags" : [ "attachments" ],
+        "summary" : "Download an attachment by digest",
+        "description" : "Returns the original bytes, after verifying them against the digest the hash identifies. A blob whose bytes no longer match is refused with 500 blob_corrupt rather than served.\n\nThe response is always application/octet-stream: a blob stores bytes and no media type, and inferring one from the content would be a guess. Store the type alongside the reference if you need it.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "hash",
+          "in" : "path",
+          "description" : "Lowercase SHA-256 digest, as returned by the upload route.",
+          "required" : true,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : {
+              "Content-Type" : {
+                "description" : "Always application/octet-stream: a blob carries no media type.",
+                "required" : true,
+                "deprecated" : false,
+                "schema" : {
+                  "type" : "string",
+                  "title" : "String"
+                }
+              }
+            },
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:deleted" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "List deleted documents",
+        "description" : "Tombstones only, with the revision and time each was deleted. Deleted documents are absent from every other listing. The page size is capped at 200, like every other listing.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Optional collection and page size.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/ListDeletedRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ListDeletedResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:restore" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Restore a deleted document",
+        "description" : "Return a tombstoned document to the live set under its original id and path. Fails with a conflict when the path has since been claimed by another document.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Document id, optional message, author, and revision.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/RestoreDocumentRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RestoreResult"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/documents:rename" : {
+      "post" : {
+        "tags" : [ "documents" ],
+        "summary" : "Rename a document",
+        "description" : "Move a document to a new id, rewriting the inbound `[[wikilinks]]` that pointed at it. A document's id is its path, so the two move together; this cannot be expressed as a create plus a delete. Fails with a conflict when the target path is held by a live document, or when `If-Match` does not match the current revision. A store that cannot rename reports 501. Frontmatter references (`files:`, `repo:`, `pr:`) are not rewritten, so a document that embeds the renamed note by frontmatter rather than by wikilink loses that edge on the next index.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Current document id, new id, optional message, author, and revision.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : false,
+                "allOf" : [ {
+                  "$ref" : "#/components/schemas/RenameDocumentRequest"
+                } ]
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RenameResult"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "501" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/v1/search" : {
+      "get" : {
+        "tags" : [ "search" ],
+        "summary" : "Search documents",
+        "description" : "Full-text search, with optional filters. `q` may be omitted when a filter is present: `fm=repo=org/repo` alone answers \"which documents carry this property\", bounded by `limit`. With neither `q` nor a filter the query is empty and returns nothing rather than the whole store, so an omitted parameter is never mistaken for a successful empty result. A filter value is resolved by the ordinary scalar rules — `42` and `true` select the number 42 and the boolean true, because that is what the document's own YAML said — and quoting forces the string: `fm=pr=\"42\"` selects a document storing \"42\" as text, and `fm=pr=42` will not. `mode=hybrid` adds vector kNN ranking.",
+        "parameters" : [ {
+          "name" : "X-Request-Id",
+          "in" : "header",
+          "description" : "Caller-provided correlation id; generated when omitted.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "q",
+          "in" : "query",
+          "description" : "Query keywords.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "collection",
+          "in" : "query",
+          "description" : "Restrict to a collection.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "tags",
+          "in" : "query",
+          "description" : "Require every listed tag; repeat for multiple tags.",
+          "required" : false,
+          "deprecated" : false,
+          "style" : "form",
+          "explode" : true,
+          "schema" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        }, {
+          "name" : "fm",
+          "in" : "query",
+          "description" : "Frontmatter equality filters, `key=value`; repeat for multiple filters. Usable without `q`: a filter on its own enumerates what matches. A value is resolved by ordinary scalar rules — `42`, `1.5` and `true` select numbers and a boolean, `org/repo` and `1.2.3` select text — and quoting forces a string: `\"42\"` selects a stored string, unquoted `42` does not. An empty value (`fm=pr=`), an unclosed quote, or a contract key (`fm=tags=review`) is rejected; filter tags with `tags` instead.",
+          "required" : false,
+          "deprecated" : false,
+          "style" : "form",
+          "explode" : true,
+          "schema" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        }, {
+          "name" : "mode",
+          "in" : "query",
+          "description" : "`lexical` (default) or `hybrid`.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "description" : "Page size (1..500, default 50).",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        }, {
+          "name" : "offset",
+          "in" : "query",
+          "description" : "Zero-based offset.",
+          "required" : false,
+          "deprecated" : false,
+          "explode" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "No credential was presented, or the credential is unknown.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The credential may not perform this operation on the requested collection.",
+            "headers" : { },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "deprecated" : false,
+        "security" : [ {
+          "apiKey" : [ ]
+        }, {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "HealthDto" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        },
+        "required" : [ "status" ],
+        "title" : "HealthDto"
+      },
+      "gokorei.tanseki.service.api.DependencyMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "contextStore" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "lookup" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "projection" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        },
+        "required" : [ "contextStore", "lookup", "projection" ],
+        "title" : "DependencyMetrics"
+      },
+      "gokorei.tanseki.service.api.ProjectionMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "lastSuccessfulAt" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "ageMillis" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "state" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "idle" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          }
+        },
+        "required" : [ "idle", "state" ],
+        "title" : "ProjectionMetrics"
+      },
+      "gokorei.tanseki.service.api.PendingOverlayMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "size" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "lag" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "expiredUnprojected" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "expiredUnprojected", "lag", "size" ],
+        "title" : "PendingOverlayMetrics"
+      },
+      "gokorei.tanseki.service.api.OutboxMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "pending" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "oldestAgeMillis" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "stuck" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "corrupt" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "deadLettered" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "corrupt", "deadLettered", "pending", "stuck" ],
+        "title" : "OutboxMetrics"
+      },
+      "gokorei.tanseki.service.api.ReconcileMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "runs" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "successfulRuns" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "degradedRuns" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "lastStatus" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "lastTrigger" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "lastReconciledAt" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "readFailures" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "projectionAttempted" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "projectionCompleted" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "projectionFailed" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "lastError" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "degradedRuns", "lastStatus", "projectionAttempted", "projectionCompleted", "projectionFailed", "readFailures", "runs", "successfulRuns" ],
+        "title" : "ReconcileMetrics"
+      },
+      "gokorei.tanseki.service.api.WatcherMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "state" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "restarts" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "lastError" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "restarts", "state" ],
+        "title" : "WatcherMetrics"
+      },
+      "ReadinessResponse" : {
+        "type" : "object",
+        "properties" : {
+          "requestId" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "status" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "ready" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "collectedAt" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "currentDocuments" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "currentEdges" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "dependencies" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.DependencyMetrics"
+          },
+          "projection" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.ProjectionMetrics"
+          },
+          "pendingOverlay" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.PendingOverlayMetrics"
+          },
+          "outbox" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.OutboxMetrics"
+          },
+          "reconcile" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.ReconcileMetrics"
+          },
+          "watcher" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.WatcherMetrics"
+          },
+          "failedEvents" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "degradedReason" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "failureReasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        },
+        "required" : [ "collectedAt", "currentDocuments", "currentEdges", "dependencies", "failedEvents", "failureReasons", "outbox", "pendingOverlay", "projection", "ready", "reconcile", "status", "watcher" ],
+        "title" : "ReadinessResponse"
+      },
+      "gokorei.tanseki.service.api.LatencyMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "attempts" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "completed" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "errors" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "totalLatencyMillis" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "lastLatencyMillis" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "maxLatencyMillis" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "lastError" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "attempts", "completed", "errors", "maxLatencyMillis", "totalLatencyMillis" ],
+        "title" : "LatencyMetrics"
+      },
+      "MetricsScope" : {
+        "type" : "object",
+        "properties" : {
+          "collections" : {
+            "type" : [ "null", "array" ],
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          },
+          "collectionFiltered" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          }
+        },
+        "required" : [ "collectionFiltered" ],
+        "title" : "MetricsScope"
+      },
+      "CollectionMetrics" : {
+        "type" : "object",
+        "properties" : {
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "currentDocuments" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "currentEdges" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "collection" ],
+        "title" : "CollectionMetrics"
+      },
+      "MetricsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "schemaVersion" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "collectedAt" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "currentDocuments" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "currentEdges" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "dependencies" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.DependencyMetrics"
+          },
+          "projection" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.ProjectionMetrics"
+          },
+          "pendingOverlay" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.PendingOverlayMetrics"
+          },
+          "outbox" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.OutboxMetrics"
+          },
+          "reconcile" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.ReconcileMetrics"
+          },
+          "watcher" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.WatcherMetrics"
+          },
+          "failedEvents" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "requests" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.LatencyMetrics"
+          },
+          "indexing" : {
+            "$ref" : "#/components/schemas/gokorei.tanseki.service.api.LatencyMetrics"
+          },
+          "ready" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "degraded" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "degradedReason" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "failureReasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          },
+          "scope" : {
+            "oneOf" : [ {
+              "type" : "null"
+            }, {
+              "$ref" : "#/components/schemas/MetricsScope"
+            } ]
+          },
+          "collections" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CollectionMetrics"
+            },
+            "title" : "ArrayList<CollectionMetrics>"
+          }
+        },
+        "required" : [ "collectedAt", "collections", "currentDocuments", "currentEdges", "degraded", "dependencies", "failedEvents", "failureReasons", "indexing", "outbox", "pendingOverlay", "projection", "ready", "reconcile", "requests", "schemaVersion", "watcher" ],
+        "title" : "MetricsResponse"
+      },
+      "ErrorBody" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "message" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "detail" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "code", "message" ],
+        "title" : "ErrorBody"
+      },
+      "ErrorEnvelope" : {
+        "type" : "object",
+        "properties" : {
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          }
+        },
+        "required" : [ "error" ],
+        "title" : "ErrorEnvelope"
+      },
+      "DocRefDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "path" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "collection", "id", "path" ],
+        "title" : "DocRefDto"
+      },
+      "DocumentListResponse" : {
+        "type" : "object",
+        "properties" : {
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocRefDto"
+            },
+            "title" : "ArrayList<DocRefDto>"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "hasMore" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "nextCursor" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "documents", "hasMore", "limit", "offset", "total" ],
+        "title" : "DocumentListResponse"
+      },
+      "GetDocumentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "GetDocumentRequest"
+      },
+      "kotlinx.serialization.json.JsonElement" : { },
+      "DocumentDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "path" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "content" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "deleted" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "frontmatter" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/kotlinx.serialization.json.JsonElement"
+            },
+            "description" : "An open, string-keyed map of JSON values. A value may be a string, number, boolean, array, or object, and keeps that type across a write and a read: an array is stored as a YAML block sequence and returns as an array, not as its repr string, and a number keeps its exact digits (`9007199254740993` round-trips unchanged). A value sent as a quoted string stays a string and is never re-typed. Keys outside the contract set (`title`, `author`, `tags`, `updated_at`, `content_hash`) take any JSON value; those five take a scalar instead, `tags` takes an array of strings, and a shape they cannot hold is refused with the key and the shape named rather than dropped. A document keeps whatever shape it was stored as, so one written before this behaviour existed still reads back the text it was written with. `updated_at` is the one key whose text form is NOT preserved: it is read as an instant and re-rendered in a single canonical spelling, so `2026-10-03T12:00:00+00:00` is stored as `2026-10-03T12:00:00Z`. The instant survives; the spelling does not. Compare instants, not strings.",
+            "title" : "LinkedHashMap<String,JsonElement>"
+          }
+        },
+        "required" : [ "collection", "content", "contentHash", "deleted", "frontmatter", "id", "path", "revision", "updatedAt" ],
+        "title" : "DocumentDto"
+      },
+      "QueryDocumentsRequest" : {
+        "type" : "object",
+        "properties" : {
+          "ids" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "ids" ],
+        "title" : "QueryDocumentsRequest"
+      },
+      "QueryDocumentsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentDto"
+            },
+            "title" : "ArrayList<DocumentDto>"
+          }
+        },
+        "required" : [ "documents" ],
+        "title" : "QueryDocumentsResponse"
+      },
+      "UpsertDocumentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "content" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "path" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "frontmatter" : {
+            "type" : [ "null", "object" ],
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/kotlinx.serialization.json.JsonElement"
+            },
+            "description" : "An open, string-keyed map of JSON values. A value may be a string, number, boolean, array, or object, and keeps that type across a write and a read: an array is stored as a YAML block sequence and returns as an array, not as its repr string, and a number keeps its exact digits (`9007199254740993` round-trips unchanged). A value sent as a quoted string stays a string and is never re-typed. Keys outside the contract set (`title`, `author`, `tags`, `updated_at`, `content_hash`) take any JSON value; those five take a scalar instead, `tags` takes an array of strings, and a shape they cannot hold is refused with the key and the shape named rather than dropped. A document keeps whatever shape it was stored as, so one written before this behaviour existed still reads back the text it was written with. `updated_at` is the one key whose text form is NOT preserved: it is read as an instant and re-rendered in a single canonical spelling, so `2026-10-03T12:00:00+00:00` is stored as `2026-10-03T12:00:00Z`. The instant survives; the spelling does not. Compare instants, not strings.",
+            "title" : "LinkedHashMap<String,JsonElement>"
+          },
+          "author" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "message" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "ifRevision" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "content", "id" ],
+        "title" : "UpsertDocumentRequest"
+      },
+      "UpsertResult" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "created" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          },
+          "frontmatterError" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "collection", "contentHash", "created", "id", "revision" ],
+        "title" : "UpsertResult"
+      },
+      "DeleteDocumentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "message" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "author" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "ifRevision" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "DeleteDocumentRequest"
+      },
+      "DeleteResult" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        },
+        "required" : [ "collection", "id", "revision" ],
+        "title" : "DeleteResult"
+      },
+      "HistoryRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "limit" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "offset" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "HistoryRequest"
+      },
+      "RevisionDto" : {
+        "type" : "object",
+        "properties" : {
+          "docId" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "author" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "message" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "deps" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        },
+        "required" : [ "author", "createdAt", "deps", "docId", "message", "revision" ],
+        "title" : "RevisionDto"
+      },
+      "HistoryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "revisions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RevisionDto"
+            },
+            "title" : "ArrayList<RevisionDto>"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "hasMore" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          }
+        },
+        "required" : [ "hasMore", "limit", "offset", "revisions", "total" ],
+        "title" : "HistoryResponse"
+      },
+      "TraverseRel" : {
+        "type" : "string",
+        "enum" : [ "links-to", "references", "embeds", "mentions" ],
+        "title" : "TraverseRel"
+      },
+      "TraverseRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "rel" : {
+            "oneOf" : [ {
+              "type" : "null"
+            }, {
+              "$ref" : "#/components/schemas/TraverseRel"
+            } ]
+          },
+          "depth" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "TraverseRequest"
+      },
+      "TraverseResponse" : {
+        "type" : "object",
+        "properties" : {
+          "ids" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        },
+        "required" : [ "ids" ],
+        "title" : "TraverseResponse"
+      },
+      "BacklinksRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "rel" : {
+            "oneOf" : [ {
+              "type" : "null"
+            }, {
+              "$ref" : "#/components/schemas/TraverseRel"
+            } ]
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "BacklinksRequest"
+      },
+      "BacklinksResponse" : {
+        "type" : "object",
+        "properties" : {
+          "ids" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "title" : "String"
+            },
+            "title" : "ArrayList<String>"
+          }
+        },
+        "required" : [ "ids" ],
+        "title" : "BacklinksResponse"
+      },
+      "BlobRefDto" : {
+        "type" : "object",
+        "properties" : {
+          "hash" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int64",
+            "title" : "Long"
+          },
+          "algorithm" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        },
+        "required" : [ "algorithm", "hash", "size" ],
+        "title" : "BlobRefDto"
+      },
+      "ListDeletedRequest" : {
+        "type" : "object",
+        "properties" : {
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "limit" : {
+            "type" : [ "null", "integer" ],
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "title" : "ListDeletedRequest"
+      },
+      "ListDeletedResponse" : {
+        "type" : "object",
+        "properties" : {
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocRefDto"
+            },
+            "title" : "ArrayList<DocRefDto>"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "documents", "total" ],
+        "title" : "ListDeletedResponse"
+      },
+      "RestoreDocumentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "message" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "author" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "ifRevision" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id" ],
+        "title" : "RestoreDocumentRequest"
+      },
+      "RestoreResult" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "created" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          }
+        },
+        "required" : [ "collection", "contentHash", "created", "id", "revision" ],
+        "title" : "RestoreResult"
+      },
+      "RenameDocumentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "newId" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "message" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "author" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "ifRevision" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          }
+        },
+        "required" : [ "id", "newId" ],
+        "title" : "RenameDocumentRequest"
+      },
+      "RenameResult" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "previousId" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "collection" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "path" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "revision" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "contentHash" : {
+            "type" : "string",
+            "title" : "String"
+          }
+        },
+        "required" : [ "collection", "contentHash", "id", "path", "previousId", "revision" ],
+        "title" : "RenameResult"
+      },
+      "HitDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "title" : "String"
+          },
+          "score" : {
+            "type" : "number",
+            "format" : "double",
+            "title" : "Double"
+          },
+          "snippet" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "path" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "title" : {
+            "type" : [ "null", "string" ],
+            "title" : "String"
+          },
+          "highlights" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/HighlightDto"
+            },
+            "title" : "ArrayList<HighlightDto>"
+          }
+        },
+        "required" : [ "highlights", "id", "score" ],
+        "title" : "HitDto"
+      },
+      "HighlightDto" : {
+        "type" : "object",
+        "properties" : {
+          "start" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "end" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          }
+        },
+        "required" : [ "end", "start" ],
+        "title" : "HighlightDto"
+      },
+      "SearchResponse" : {
+        "type" : "object",
+        "properties" : {
+          "hits" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/HitDto"
+            },
+            "title" : "ArrayList<HitDto>"
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "title" : "Int"
+          },
+          "hasMore" : {
+            "type" : "boolean",
+            "title" : "Boolean"
+          }
+        },
+        "required" : [ "hasMore", "hits", "limit", "offset" ],
+        "title" : "SearchResponse"
+      }
+    },
+    "examples" : { },
+    "securitySchemes" : {
+      "apiKey" : {
+        "type" : "apiKey",
+        "description" : "Tanseki API credential.",
+        "name" : "X-API-Key",
+        "in" : "header"
+      },
+      "bearerAuth" : {
+        "type" : "http",
+        "description" : "Tanseki API credential.",
+        "scheme" : "bearer",
+        "bearerFormat" : "opaque"
+      }
+    }
+  },
+  "webhooks" : { }
+}

@@ -1,0 +1,49 @@
+-- Graph as relations. The graph is a derived projection; edges are canonical
+-- because they are derived from in-file frontmatter/[[wikilinks]].
+
+CREATE TABLE edges (
+    src   TEXT NOT NULL,
+    dst   TEXT NOT NULL,
+    rel   TEXT NOT NULL,
+    props TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (src, rel, dst)
+);
+
+CREATE INDEX edges_dst_idx ON edges(dst, rel);
+CREATE INDEX edges_src_idx ON edges(src, rel);
+
+neighborsOut:
+SELECT * FROM edges WHERE src = ? ORDER BY rel, dst;
+
+neighborsByRel:
+SELECT * FROM edges WHERE src = ? AND rel = ? ORDER BY rel, dst;
+
+neighborsIn:
+SELECT * FROM edges WHERE dst = ? ORDER BY rel, src;
+
+upsert:
+INSERT OR REPLACE INTO edges(src, dst, rel, props) VALUES (?, ?, ?, ?);
+
+deleteEdgesFrom:
+DELETE FROM edges WHERE src = ?;
+
+deleteEdgesFromRel:
+DELETE FROM edges WHERE src = ? AND rel = ?;
+
+deleteEdgesTo:
+DELETE FROM edges WHERE dst = ?;
+
+deleteEdgesToRel:
+DELETE FROM edges WHERE dst = ? AND rel = ?;
+
+clearEdges:
+DELETE FROM edges;
+
+-- Edges address documents by id, so a renamed document's edges move with it.
+-- OR REPLACE resolves the (src, rel, dst) primary key when a rename would
+-- otherwise land on an edge that already exists.
+retargetEdgeSrc:
+UPDATE OR REPLACE edges SET src = ? WHERE src = ?;
+
+retargetEdgeDst:
+UPDATE OR REPLACE edges SET dst = ? WHERE dst = ?;

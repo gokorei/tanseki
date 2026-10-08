@@ -1,0 +1,98 @@
+CREATE TABLE projection_operations (
+    id                 TEXT    PRIMARY KEY,
+    document_id        TEXT    NOT NULL,
+    revision           TEXT    NOT NULL,
+    content_hash       TEXT    NOT NULL,
+    kind               TEXT    NOT NULL,
+    edge_version       TEXT    NOT NULL,
+    projection_version TEXT    NOT NULL,
+    created_at         INTEGER NOT NULL,
+    attempts           INTEGER NOT NULL DEFAULT 0,
+    dead_lettered      INTEGER NOT NULL DEFAULT 0,
+    -- Lease columns. NULL means unowned: the operation is claimable by anyone.
+    lease_owner        TEXT,
+    lease_token        TEXT,
+    lease_expires_at   INTEGER
+);
+
+CREATE INDEX projection_operations_pending_idx
+    ON projection_operations(created_at, id);
+
+CREATE INDEX projection_operations_dead_lettered_idx
+    ON projection_operations(dead_lettered, created_at, id);
+
+CREATE INDEX projection_operations_lease_idx
+    ON projection_operations(lease_expires_at);
+
+selectPending:
+SELECT * FROM projection_operations ORDER BY created_at, id LIMIT ?;
+
+selectPendingLive:
+SELECT * FROM projection_operations WHERE dead_lettered = 0 ORDER BY created_at, id LIMIT ?;
+
+selectDeadLettered:
+SELECT * FROM projection_operations WHERE dead_lettered = 1 ORDER BY created_at, id LIMIT ?;
+
+selectById:
+SELECT * FROM projection_operations WHERE id = ?;
+
+countStuck:
+SELECT count(*) FROM projection_operations WHERE attempts > 0 AND dead_lettered = 0;
+
+oldestStuck:
+SELECT min(created_at) FROM projection_operations WHERE attempts > 0 AND dead_lettered = 0;
+
+countDeadLettered:
+SELECT count(*) FROM projection_operations WHERE dead_lettered = 1;
+
+upsert:
+INSERT OR REPLACE INTO projection_operations(
+    id, document_id, revision, content_hash, kind, edge_version, projection_version, created_at, attempts,
+    dead_lettered
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+incrementFailure:
+UPDATE projection_operations SET attempts = attempts + 1 WHERE id = ?;
+
+markDeadLettered:
+UPDATE projection_operations SET dead_lettered = 1 WHERE id = ?;
+
+delete:
+DELETE FROM projection_operations WHERE id = ?;
+
+-- Claiming is a conditional UPDATE, not a read-then-write: the WHERE clause is
+-- what makes two concurrent workers resolve to exactly one winner. Without the
+-- expiry check the loser would overwrite the winner's lease and both would
+-- believe they own the operation.
+claimOperation:
+UPDATE projection_operations
+SET lease_owner = ?, lease_token = ?, lease_expires_at = ?
+WHERE id = ?
+  AND dead_lettered = 0
+  AND (lease_expires_at IS NULL OR lease_expires_at <= ?);
+
+completeClaimed:
+DELETE FROM projection_operations
+WHERE id = ?
+  AND lease_token = ?
+  AND lease_expires_at > ?;
+
+releaseClaim:
+UPDATE projection_operations
+SET lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
+WHERE id = ?
+  AND lease_token = ?;
+
+selectLeased:
+SELECT id, lease_owner, lease_token, lease_expires_at
+FROM projection_operations
+WHERE lease_expires_at > ?
+ORDER BY lease_expires_at, id;
+
+-- Clearing a lease is part of enqueue: a fresh operation for the same id must not
+-- inherit a stale lease, or it would be un-deliverable until the old one lapsed.
+clearLeaseOnEnqueue:
+UPDATE projection_operations
+SET lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
+WHERE id = ? AND lease_token IS NOT NULL;

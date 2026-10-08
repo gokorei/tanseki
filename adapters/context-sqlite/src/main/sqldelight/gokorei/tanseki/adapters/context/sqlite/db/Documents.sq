@@ -1,0 +1,154 @@
+-- Canonical documents for library mode. Content lives here; FTS/kNN live in the
+-- Lucene Lookup, never in this schema.
+
+CREATE TABLE documents (
+    id           TEXT    NOT NULL PRIMARY KEY,
+    collection   TEXT    NOT NULL,
+    path         TEXT    NOT NULL,
+    frontmatter  TEXT    NOT NULL DEFAULT '{}',
+    content      TEXT    NOT NULL,
+    content_hash TEXT    NOT NULL,
+    revision     TEXT    NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    deleted      INTEGER NOT NULL DEFAULT 0,
+    -- The verbatim frontmatter block, when the document was parsed from one.
+    -- The typed `frontmatter` column cannot model every YAML shape (duplicate
+    -- keys, comments, key order), so without this the read side re-renders an
+    -- empty canonical block and a later body edit deletes the user's block.
+    -- NULL for frontmatter Tanseki synthesized, which renders canonically.
+    -- Appended last so positional `INSERT INTO documents VALUES (...)` rows
+    -- written by older releases still align.
+    frontmatter_raw TEXT
+);
+
+CREATE UNIQUE INDEX documents_active_collection_path_key
+    ON documents(collection, path) WHERE deleted = 0;
+CREATE INDEX documents_collection_idx ON documents(collection);
+-- A folder tree is built from path-prefix queries, which this serves directly.
+CREATE INDEX documents_path_idx ON documents(path);
+
+selectAll:
+SELECT * FROM documents WHERE deleted = 0 ORDER BY id;
+
+selectAllIncludingDeleted:
+SELECT * FROM documents ORDER BY id;
+
+selectDeleted:
+SELECT * FROM documents WHERE deleted = 1 ORDER BY id;
+
+selectDeletedInCollection:
+SELECT * FROM documents WHERE deleted = 1 AND collection = ? ORDER BY id;
+
+selectById:
+SELECT * FROM documents WHERE id = ? AND deleted = 0;
+
+selectByIdIncludingDeleted:
+SELECT * FROM documents WHERE id = ?;
+
+selectByPath:
+SELECT * FROM documents WHERE path = ? AND deleted = 0;
+
+selectByCollectionAndPath:
+SELECT * FROM documents WHERE collection = ? AND path = ? AND deleted = 0;
+
+selectCollection:
+SELECT * FROM documents WHERE collection = ? AND deleted = 0 ORDER BY id;
+
+selectCollectionPage:
+SELECT * FROM documents WHERE collection = ? AND deleted = 0 ORDER BY id LIMIT ? OFFSET ?;
+
+selectAllPage:
+SELECT * FROM documents WHERE deleted = 0 ORDER BY id LIMIT ? OFFSET ?;
+
+selectAllPageByPathPrefix:
+SELECT * FROM documents WHERE deleted = 0 AND path LIKE ? ESCAPE '\' ORDER BY id LIMIT ? OFFSET ?;
+
+selectCollectionPageByPathPrefix:
+SELECT * FROM documents WHERE collection = ? AND deleted = 0 AND path LIKE ? ESCAPE '\' ORDER BY id LIMIT ? OFFSET ?;
+
+-- Keyset pagination. `id > ?` is a range scan on the primary key, so page N
+-- costs the same as page 1 instead of discarding N-1 rows. `limit + 1` rows are
+-- taken so the caller learns whether more exist without a second count query.
+listAfterAll:
+SELECT * FROM documents WHERE deleted = 0 AND id > ? ORDER BY id LIMIT ?;
+
+listAfterCollection:
+SELECT * FROM documents WHERE collection = ? AND deleted = 0 AND id > ? ORDER BY id LIMIT ?;
+
+listAfterAllByPathPrefix:
+SELECT * FROM documents WHERE deleted = 0 AND id > ? AND path LIKE ? ESCAPE '\' ORDER BY id LIMIT ?;
+
+listAfterCollectionByPathPrefix:
+SELECT * FROM documents WHERE collection = ? AND deleted = 0 AND id > ? AND path LIKE ? ESCAPE '\' ORDER BY id LIMIT ?;
+
+countAllByPathPrefix:
+SELECT count(*) FROM documents WHERE deleted = 0 AND path LIKE ? ESCAPE '\';
+
+countCollectionByPathPrefix:
+SELECT count(*) FROM documents WHERE collection = ? AND deleted = 0 AND path LIKE ? ESCAPE '\';
+
+-- The LIKE metacharacters in a path prefix are escaped by the caller so a
+-- folder literally named `100%` or `a_b` matches only itself.
+
+countAll:
+SELECT count(*) FROM documents WHERE deleted = 0;
+
+countCollection:
+SELECT count(*) FROM documents WHERE collection = ? AND deleted = 0;
+
+selectByIds:
+SELECT * FROM documents WHERE id IN ? AND deleted = 0;
+
+insertOrIgnore:
+INSERT OR IGNORE INTO documents(
+    id, collection, path, frontmatter, content, content_hash, revision, updated_at, deleted, frontmatter_raw
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+update:
+UPDATE documents SET
+    collection = ?,
+    path = ?,
+    frontmatter = ?,
+    content = ?,
+    content_hash = ?,
+    revision = ?,
+    updated_at = ?,
+    deleted = ?,
+    frontmatter_raw = ?
+WHERE id = ?;
+
+markRestored:
+UPDATE documents SET
+    revision = ?,
+    updated_at = ?,
+    deleted = 0
+WHERE id = ? AND deleted = 1;
+
+markDeleted:
+UPDATE documents SET
+    revision = ?,
+    updated_at = ?,
+    deleted = 1
+WHERE id = ? AND deleted = 0;
+
+-- A rename moves the id and the path in one statement because they are one
+-- thing: the id is derived from the path, so updating one without the other
+-- leaves a document that disagrees with its own identity.
+--
+-- Nothing here checks whether the target path is free. The partial unique index
+-- on (collection, path) WHERE deleted = 0 does that, so the adapter cannot hold
+-- an opinion that drifts from the constraint that actually enforces it.
+renameDocument:
+UPDATE documents SET
+    id = :newId,
+    path = :newPath,
+    revision = :newRevision,
+    updated_at = :newUpdatedAt
+WHERE id = :oldId;
+
+-- A tombstone releases its path, so renaming onto a path that only a tombstone
+-- holds is legal and reclaims it. The row has to go first: it occupies the very
+-- primary key the renamed document is moving into.
+deleteByIdIncludingDeleted:
+DELETE FROM documents WHERE id = ?;

@@ -1,0 +1,153 @@
+# Local and development stacks for Tanseki.
+#
+#   docker compose --profile vault   up      # file store, one mounted vault
+#   docker compose --profile server  up -d   # Postgres + Meilisearch
+#
+# Two profiles, because they are two different stores rather than two ways to run
+# one store. `vault` writes Markdown files you also open in Obsidian; `server`
+# writes Postgres rows and a Meilisearch index. A daemon cannot serve both from one
+# `TANSEKI_PATH`, so they are separate stacks with separate volumes.
+#
+# Every image is pinned by digest, matching the versions the integration tests
+# boot. A tag like `postgres:16` moves; a digest does not, so the stack you debug
+# against is the stack CI exercised.
+#
+# NOT for production. There is no TLS termination, no secret management, and the
+# credentials are development placeholders that are visible in this file. See
+# docs/deployment.md for what to do instead.
+
+name: tanseki
+
+x-daemon: &daemon
+  build:
+    context: .
+    dockerfile: service/Dockerfile
+  image: tanseki-daemon:local
+  restart: unless-stopped
+  environment: &daemon-env
+    TANSEKI_LOG_LEVEL: ${TANSEKI_LOG_LEVEL:-INFO}
+
+services:
+  # ---------------------------------------------------------------------------
+  # Vault daemon: the file store over a directory of Markdown.
+  # ---------------------------------------------------------------------------
+  vault:
+    <<: *daemon
+    profiles: [vault]
+    environment:
+      <<: *daemon-env
+      TANSEKI_PROFILE: vault
+      TANSEKI_PATH: /vault
+      TANSEKI_INDEX_DIR: /vault/.tanseki/index
+      TANSEKI_SOCKET: /vault/.tanseki/tanseki.sock
+      # A real key, not a placeholder: this daemon exposes an HTTP API and the
+      # default is no authentication at all. Generate one with
+      # `openssl rand -hex 32` and put it in a .env file beside this one, which
+      # compose reads automatically and which is not committed.
+      TANSEKI_API_KEY: ${TANSEKI_API_KEY:?set TANSEKI_API_KEY in .env - see docs/deployment.md}
+    ports:
+      - "${TANSEKI_VAULT_PORT:-8088}:8088"
+    volumes:
+      # The daemon runs as uid 10001 (see service/Dockerfile). A bind mount owned
+      # by your user is not writable by it, and the daemon fails at startup with an
+      # opaque AccessDeniedException on `/vault/.tanseki`.
+      #
+      # On Linux, either `sudo chown -R 10001:10001 "$VAULT"` once, or override the
+      # user with `user: "${UID:-1000}:${GID:-1000}"` in a compose.override.yml.
+      # On macOS and Windows, Docker Desktop maps the uid for you and this works as
+      # written. Either way the fix is the same shape: the container user and the
+      # mount owner have to agree.
+      # Defaults rather than required, because Compose interpolates the whole file
+      # before it selects a profile: a required variable here would make
+      # `--profile server` fail too, on a service it never starts.
+      - ${TANSEKI_VAULT_PATH:-./vault} /vault
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8088/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Server profile: Postgres for the canonical store, Meilisearch for the index.
+  # ---------------------------------------------------------------------------
+  postgres:
+    profiles: [server]
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tanseki
+      POSTGRES_USER: tanseki
+      # Development credential, in a file everyone can read. Not a secret.
+      POSTGRES_PASSWORD: ${TANSEKI_POSTGRES_PASSWORD:-tanseki-dev}
+      # Tanseki applies its own migrations, recorded in schema_migrations, so the
+      # image's initdb scripts are not needed and are not run.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` alone returns true before the init scripts finish, so the
+      # server would be marked healthy while the database is still being created.
+      test: ["CMD-SHELL", "pg_isready -U tanseki -d tanseki"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # Published for `psql`, not for the daemon: the daemon reaches Postgres over
+    # the compose network by service name.
+    ports:
+      - "${TANSEKI_POSTGRES_PORT:-5432}:5432"
+
+  meilisearch:
+    profiles: [server]
+    image: getmeili/meilisearch:v1.15.2@sha256:fe500cf9cca05cb9f027981583f28eccf17d35d94499c1f8b7b844e7418152fc
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${TANSEKI_MEILI_KEY:-tanseki-dev-master-key}
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: development
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "${TANSEKI_MEILI_PORT:-7700}:7700"
+
+  server:
+    <<: *daemon
+    profiles: [server]
+    environment:
+      <<: *daemon-env
+      TANSEKI_PROFILE: server
+      # A Postgres URL, not a directory. The server profile has no filesystem
+      # store, so this is not comparable to the vault's TANSEKI_PATH.
+      TANSEKI_POSTGRES_URL: jdbc:postgresql://postgres:5432/tanseki
+      TANSEKI_POSTGRES_USER: tanseki
+      TANSEKI_POSTGRES_PASSWORD: ${TANSEKI_POSTGRES_PASSWORD:-tanseki-dev}
+      TANSEKI_MEILI_URL: http://meilisearch:7700
+      TANSEKI_MEILI_KEY: ${TANSEKI_MEILI_KEY:-tanseki-dev-master-key}
+      TANSEKI_INDEX_DIR: /var/lib/tanseki/index
+      TANSEKI_API_KEY: ${TANSEKI_API_KEY:?set TANSEKI_API_KEY in .env - see docs/deployment.md}
+    ports:
+      - "${TANSEKI_SERVER_PORT:-8088}:8088"
+    volumes:
+      # The Lucene index for a server profile lives outside the database. It is
+      # derived state: deleting it costs a reindex, not documents.
+      - server-index:/var/lib/tanseki
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8088/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  meili-data:
+  server-index:

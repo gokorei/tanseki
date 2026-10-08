@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read-only policy and how to fork
+    url: https://github.com/gokorei/tanseki/blob/main/GOVERNANCE.md
+    about: Pull requests are not merged. Forking is the supported way to change Tanseki.
+  - name: Security vulnerability
+    url: https://github.com/gokorei/tanseki/security/advisories/new
+    about: Report privately. Never open a public issue for a suspected vulnerability.
+  - name: Code of conduct
+    url: https://github.com/gokorei/tanseki/blob/main/CODE_OF_CONDUCT.md
+    about: Expected behavior in every project space, including issue threads.

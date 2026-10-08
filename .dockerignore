@@ -1,0 +1,127 @@
+# Build context for service/Dockerfile. The image build only needs the Gradle
+# project and the sources it compiles; everything else must never enter the
+# context or the build cache.
+#
+# Two rules govern this file. It must cover every path the Dockerfile does *not*
+# COPY, and it must cover every kind of file that can carry a secret, a local
+# vault, a database, a log, or a tool cache — because anything left in the
+# context is also sent to the daemon and kept in a build layer. `./gradlew
+# checkContainerContract` asserts the second rule mechanically, so adding a tool
+# or a state directory to the repository without adding it here fails the build
+# rather than silently shipping it.
+
+# Version control and CI
+.git
+**/.git
+.gitignore
+.gitattributes
+.github
+.pijul
+**/.pijul
+.pijulignore
+.ignore
+.ci
+
+# Gradle, Kotlin, and build output
+.kotlin
+**/.kotlin
+.gradle
+**/.gradle
+**/build
+build-logic/.gradle
+**/out
+**/sdk-drift
+**/*.g
+**/.gradletasknamecache
+
+# Documentation, contracts, and generated SDKs are not compiled into the image
+docs
+CONTRIBUTING.md
+SECURITY.md
+README.md
+CODEOWNERS
+
+# Local developer state and secrets
+.editorconfig
+.idea
+**/.idea
+.vscode
+**/.vscode
+*.iml
+*.ipr
+*.iws
+*.code-workspace
+.coverage
+.coverage.*
+coverage.xml
+*.lcov
+htmlcov
+**/htmlcov
+**/reports
+.pytest_cache
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+.mypy_cache
+**/.mypy_cache
+.ruff_cache
+**/.ruff_cache
+.tox
+**/.tox
+**/*.egg-info
+**/.eggs
+**/dist
+.venv
+.venv-*
+.python-sdk-venv
+**/.venv
+**/node_modules
+**/target
+**/.cache
+**/.DS_Store
+**/Thumbs.db
+
+# Runtime and vault state
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sock
+**/*.sock.lock
+**/.tanseki
+**/logs
+**/*.log
+**/hs_err_pid*
+**/replay_pid*
+**/.vault
+.vault
+
+# Secrets and local environment
+.env
+.env.*
+**/.env
+**/.env.*
+**/.envrc
+**/.netrc
+**/.npmrc
+**/.pypirc
+**/.dockercfg
+**/credentials
+**/secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets.properties
+local.properties
+
+# CI and issue templates
+**/*.md
+
+# Legal notices must reach the shipped image: Apache-2.0 requires the licence
+# text to travel with the binary, and the MIT notice for the TOON library is a
+# condition of using it. Both are copied into the runtime image explicitly.
+!LICENSE
+!THIRD_PARTY_NOTICES.md

@@ -1,0 +1,38 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LoopWithTooManyJumpStatements:Tokenizer.kt$WhitespaceTokenizer$for</ID>
+    <ID>TooManyFunctions:CliOperations.kt$CliOperations</ID>
+    <ID>TooManyFunctions:ContextStore.kt$ContextStore</ID>
+    <ID>TooManyFunctions:ContextStoreContract.kt$ContextStoreContract</ID>
+    <ID>TooManyFunctions:ContextStoreContract.kt$ContextStoreEdgeReplacementContract</ID>
+    <ID>TooManyFunctions:ContextStoreContract.kt$ContextStoreListingContract</ID>
+    <ID>TooManyFunctions:ContextStoreRetentionContract.kt$ContextStoreRetentionContract</ID>
+    <ID>TooManyFunctions:FileContextStore.kt$FileContextStore : ContextStoreProjectionOperationStore</ID>
+    <ID>TooManyFunctions:FrontmatterCodec.kt$FrontmatterCodec</ID>
+    <ID>TooManyFunctions:IdempotencyStore.kt$IdempotencyStore</ID>
+    <ID>TooManyFunctions:InMemoryContextStore.kt$InMemoryContextStore : ContextStoreProjectionOperationStore</ID>
+    <ID>TooManyFunctions:IpcServer.kt$IpcServer : AutoCloseable</ID>
+    <ID>TooManyFunctions:LookupContract.kt$LookupContract</ID>
+    <ID>TooManyFunctions:LuceneLookup.kt$LuceneLookup : LookupVectorWriterAutoCloseable</ID>
+    <ID>TooManyFunctions:McpStore.kt$HttpMcpStore : McpStoreAutoCloseable</ID>
+    <ID>TooManyFunctions:McpToolArguments.kt$gokorei.tanseki.service.mcp.McpToolArguments.kt</ID>
+    <ID>TooManyFunctions:MeiliLookup.kt$MeiliLookup : LookupAutoCloseable</ID>
+    <ID>TooManyFunctions:OperationalMetrics.kt$OperationalMetrics : MetricsRecorderScopedMetricsProviderIndexObserver</ID>
+    <ID>TooManyFunctions:PendingOverlay.kt$PendingOverlay</ID>
+    <ID>TooManyFunctions:PijulCliClient.kt$PijulCliClient : PijulClient</ID>
+    <ID>TooManyFunctions:PostgresContextStore.kt$PostgresContextStore : ContextStoreProjectionOperationStoreAutoCloseable</ID>
+    <ID>TooManyFunctions:ProjectionOperationStore.kt$ProjectionOperationStore</ID>
+    <ID>TooManyFunctions:ProjectionWorker.kt$ProjectionWorker</ID>
+    <ID>TooManyFunctions:QueryFacade.kt$QueryFacade</ID>
+    <ID>TooManyFunctions:SqliteContextStore.kt$SqliteContextStore : ContextStoreProjectionOperationStore</ID>
+    <ID>TooManyFunctions:SqliteSchema.kt$SqliteSchema</ID>
+    <ID>TooManyFunctions:StoreApi.kt$gokorei.tanseki.service.api.StoreApi.kt</ID>
+    <ID>TooManyFunctions:StoreApiDtos.kt$gokorei.tanseki.service.api.StoreApiDtos.kt</ID>
+    <ID>TooManyFunctions:StoreApiServer.kt$gokorei.tanseki.service.api.StoreApiServer.kt</ID>
+    <ID>TooManyFunctions:TansekiMcpServer.kt$TansekiMcpServer</ID>
+    <ID>TooManyFunctions:VaultDaemon.kt$VaultDaemon : DaemonRuntime</ID>
+    <ID>UnusedPrivateMember:ProjectionWorker.kt$ProjectionWorker$private fun processSafelyUnclaimed(operation: ProjectionOperation): ProcessAttempt</ID>
+  </CurrentIssues>
+</SmellBaseline>
