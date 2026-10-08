@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -29,6 +30,10 @@ class DaemonFactoryTest {
 
     @Test
     fun `vault profile starts file and lucene adapters with local resources`() {
+        // Vault mode shells out to the `pijul` binary on open: without one this
+        // is an environment gap rather than a product defect. The build job
+        // installs the pinned binary; anywhere else this skips.
+        assumeTrue(pijulAvailable(), "pijul binary is required to open vault mode")
         val vault = Files.createDirectories(tmp.resolve("vault"))
         val socket = Path.of("/tmp", "tanseki-${UUID.randomUUID().toString().take(8)}.sock")
         val config =
@@ -93,6 +98,7 @@ class DaemonFactoryTest {
 
     @Test
     fun `a second writer is refused before any store or index is opened`() {
+        assumeTrue(pijulAvailable(), "pijul binary is required to open vault mode")
         val vault = Files.createDirectories(tmp.resolve("single-writer"))
         val index = tmp.resolve("single-writer-index")
         val socket = Path.of("/tmp", "tanseki-${UUID.randomUUID().toString().take(8)}.sock")
@@ -224,4 +230,14 @@ class DaemonFactoryTest {
                 assertEquals(0, requireNotNull(handles.store.projectionOperations()).backlog().pending)
             }
         }
+
+    private fun pijulAvailable(): Boolean {
+        // Same resolution as PijulCliClient: explicit binary env first, `pijul`
+        // on PATH otherwise. A probe, not a version check — vault mode only
+        // needs the binary to exist here; the pijul job pins the version.
+        val binary = System.getenv("TANSEKI_PIJUL_BINARY") ?: "pijul"
+        return runCatching {
+            ProcessBuilder(binary, "--version").redirectErrorStream(true).start().waitFor() == 0
+        }.getOrDefault(false)
+    }
 }

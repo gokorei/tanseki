@@ -192,6 +192,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends libsodium-dev pkg-config
           cargo install --root "$HOME/.local" "pijul" --version "=$PIJUL_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # The adapter resolves an explicit TANSEKI_PIJUL_BINARY first and only
+          # then falls back to PATH. `$HOME` cannot go in a step `env:` mapping
+          # (it is passed literally, and `${{ env.HOME }}` is empty in the
+          # expression context), so it is exported here where the shell expands
+          # it. Every later step — including the Gradle workers — inherits it.
+          echo "TANSEKI_PIJUL_BINARY=$HOME/.local/bin/pijul" >> "$GITHUB_ENV"
 
       - name: Verify the pin
         run: |
@@ -223,10 +229,11 @@ jobs:
 
       - name: Drive PijulCliClient against the real binary
         # The stubbed unit tests cannot catch a flag the pinned release rejects,
-        # so this job runs the adapter against a real binary.
+        # so this job runs the adapter against a real binary. The binary path
+        # arrives via GITHUB_ENV from the install step, where the shell expands
+        # $HOME; it cannot be written here (step env is literal).
         env:
           TANSEKI_RUN_PIJUL_INTEGRATION: "true"
-          TANSEKI_PIJUL_BINARY: ${{ env.HOME }}/.local/bin/pijul
         run: ./gradlew :adapters:pijul-cli:test --no-daemon
 
       - name: Install the daemon distribution
@@ -300,12 +307,19 @@ jobs:
       - name: Health smoke
         run: |
           set -euo pipefail
+          # `--network host`, not a published port: the daemon binds loopback by
+          # default and the security posture rejects wildcard binds, so through
+          # bridge NAT the mapped port has nothing behind it (host curls are
+          # refused/reset while the container-local HEALTHCHECK passes). On host
+          # networking the container shares the loopback, which is exactly the
+          # documented access pattern (`curl localhost:8088/v1/health`). This is
+          # Linux-only, which is all this job runs on.
           docker run --rm -d --name tanseki-ci \
+            --network host \
             -e TANSEKI_PROFILE=library \
             -e TANSEKI_PATH=/vault/library.db \
             -e TANSEKI_INDEX_DIR=/vault/.tanseki/index \
             -e TANSEKI_API_KEY=ci-docker-key \
-            -p 8088:8088 \
             tanseki-ci
           trap 'docker logs tanseki-ci || true; docker rm -f tanseki-ci || true' EXIT
           for attempt in $(seq 1 60); do

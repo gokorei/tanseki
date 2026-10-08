@@ -176,6 +176,14 @@ class StoreApiTest {
      * fixed number of lines, since how many arrive depends on timing.
      */
     private fun eventProbe(path: String): EventProbe {
+        // Read BEFORE opening the socket: the server can register the new
+        // subscriber before this thread gets back from `Socket()`, and a
+        // baseline read after that already contains our own subscription, so
+        // `subscriberCount() > baseline` would never become true and the wait
+        // below would burn its whole deadline. On a fast loopback the server
+        // routinely wins that race; on a loaded CI runner the test thread
+        // loses it every time.
+        val baseline = changeFeed.subscriberCount()
         val socket = Socket("127.0.0.1", port)
         socket.soTimeout = 0
         socket.getOutputStream().bufferedWriter().apply {
@@ -199,12 +207,8 @@ class StoreApiTest {
         // A publish that happens before the server registers the subscription is
         // delivered to nobody: a fresh subscriber is owed the present, not the
         // retained window. Waiting for the feed to report the new subscriber
-        // removes that race instead of hoping the request wins it. The deadline
-        // is generous on purpose: on a saturated CI runner the server thread can
-        // stall for seconds while other modules compile in parallel, and a
-        // registration timeout is otherwise indistinguishable from a dead feed.
-        val baseline = changeFeed.subscriberCount()
-        val deadline = System.currentTimeMillis() + 30_000
+        // removes that race instead of hoping the request wins it.
+        val deadline = System.currentTimeMillis() + 5_000
         while (changeFeed.subscriberCount() <= baseline && System.currentTimeMillis() < deadline) {
             Thread.sleep(10)
         }
