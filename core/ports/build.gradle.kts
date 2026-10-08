@@ -1,5 +1,5 @@
 plugins {
-    id("tanseki.kotlin-library")
+    id("tanseki.kotlin-published")
 }
 
 dependencies {
