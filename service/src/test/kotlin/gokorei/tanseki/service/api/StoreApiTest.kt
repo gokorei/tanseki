@@ -199,9 +199,12 @@ class StoreApiTest {
         // A publish that happens before the server registers the subscription is
         // delivered to nobody: a fresh subscriber is owed the present, not the
         // retained window. Waiting for the feed to report the new subscriber
-        // removes that race instead of hoping the request wins it.
+        // removes that race instead of hoping the request wins it. The deadline
+        // is generous on purpose: on a saturated CI runner the server thread can
+        // stall for seconds while other modules compile in parallel, and a
+        // registration timeout is otherwise indistinguishable from a dead feed.
         val baseline = changeFeed.subscriberCount()
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 30_000
         while (changeFeed.subscriberCount() <= baseline && System.currentTimeMillis() < deadline) {
             Thread.sleep(10)
         }

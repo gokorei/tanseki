@@ -206,15 +206,19 @@ jobs:
         # none, so the suite would fail for a reason that has nothing to do with
         # the adapter. `--no-link` keeps the identity offline-only.
         # `pijul identity new` still talks to an SSH agent even with `--no-link`
-        # ("SSH agent error: SSH_AUTH_SOCK not found" without one), so an
-        # ephemeral agent is started here and its socket exported to every later
-        # step through GITHUB_ENV — the adapter tests and the daemon smoke test
-        # below both record through it.
+        # ("SSH agent error: SSH_AUTH_SOCK not found" without one), and it needs
+        # a key loaded in the agent ("No SSH keys in agent" without one). An
+        # ephemeral ed25519 key is generated for the run — it signs local test
+        # records only and is never committed — and the socket is exported to
+        # every later step through GITHUB_ENV: the adapter tests and the daemon
+        # smoke test below both record through it.
         run: |
           set -euo pipefail
           eval "$(ssh-agent -s)"
           echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          ssh-keygen -t ed25519 -N "" -f "$RUNNER_TEMP/ci-pijul-key" -C "ci@gokorei.dev"
+          ssh-add "$RUNNER_TEMP/ci-pijul-key"
           pijul identity new --no-link --email "ci@gokorei.dev" --display-name "Tanseki CI"
 
       - name: Drive PijulCliClient against the real binary
