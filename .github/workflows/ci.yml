@@ -136,6 +136,11 @@ jobs:
           cache-read-only: false
 
       - name: Run the container-backed contracts
+        # `coverageBudget` is deliberately absent here: it needs JaCoCo reports
+        # from every module, which only the full `./gradlew build` in the build
+        # job produces (and `check` enforces it there). This job's coverage duty
+        # is `checkRequiredIntegrationCoverage` below: the suites it names must
+        # have run against real containers.
         run: |
           ./gradlew --no-daemon -Ptanseki.runIntegrationTests=true \
             :adapters:lookup-meili:test \
@@ -143,8 +148,7 @@ jobs:
             :composition:test \
             :cli:test \
             :service:test \
-            checkRequiredIntegrationCoverage \
-            coverageBudget
+            checkRequiredIntegrationCoverage
 
       - name: Upload test reports
         if: always()
@@ -264,13 +268,16 @@ jobs:
           # directory the store happened to read.
           test -d "$vault/.pijul"
           curl --fail --silent \
+            -H "X-API-Key: ci-pijul-key" \
             -H "Content-Type: application/json" \
             -X POST http://127.0.0.1:8090/v1/documents:upsert \
             -d '{"id":"ci/pijul/note","content":"# CI\n\nreal pijul write","frontmatter":{"tags":["ci"]}}' \
             | tee .ci/upsert.json
           echo
           grep -q '"revision"' .ci/upsert.json
-          curl --fail --silent --get --data-urlencode "q=pijul" http://127.0.0.1:8090/v1/search \
+          curl --fail --silent \
+            -H "X-API-Key: ci-pijul-key" \
+            --get --data-urlencode "q=pijul" http://127.0.0.1:8090/v1/search \
             | tee .ci/search.json
           echo
           grep -q "ci/pijul/note" .ci/search.json

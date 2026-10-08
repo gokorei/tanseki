@@ -55,6 +55,16 @@ dependencies {
     implementation(libs.mcp)
     implementation(libs.jtoon)
 
+    // Patched BOMs for the HIGH/CRITICAL CVEs the image scan enforces (Trivy,
+    // severity HIGH,CRITICAL with exit-code 1). The vulnerable lines arrive
+    // transitively — jackson 2.x and netty via ktor-openapi/swagger, jackson
+    // 3.x via jtoon — so the platforms lift them to their fixed releases
+    // without touching any direct declaration. Plain platforms, not enforced
+    // ones: conflict resolution takes the highest version, which is the fix.
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.21.7"))
+    implementation(platform("tools.jackson:jackson-bom:3.2.3"))
+    implementation(platform("io.netty:netty-bom:4.2.17.Final"))
+
     testImplementation(project(":testkit"))
     testImplementation(libs.testcontainers)
     testImplementation(libs.testcontainers.postgresql)
