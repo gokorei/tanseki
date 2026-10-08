@@ -29,7 +29,10 @@ import gokorei.tanseki.core.text.MarkdownParser
  * On rewrite, [reconcile] removes the document's previous edges first so stale
  * links do not linger.
  */
-class EdgeDeriver(private val store: ContextStore) {
+class EdgeDeriver(
+    private val store: ContextStore,
+    private val index: ReferenceIndex? = null
+) {
     fun derive(doc: Document): List<Edge> {
         val edges = mutableListOf<Edge>()
 
@@ -79,8 +82,32 @@ class EdgeDeriver(private val store: ContextStore) {
      * This is what repairs a `references` edge whose target is written after the
      * referrer: the referrer derived nothing while the value dangled, and
      * re-deriving it once the target exists produces the edge.
+     *
+     * With a [ReferenceIndex] only sources whose normalized reference is the
+     * target id or one of its suffix parents are re-derived. A review comment
+     * whose `repo`/`pr` names a GitHub pull request matches nothing, so its
+     * repair is empty without reading the collection. Without an index the
+     * whole collection is re-derived, as before.
      */
     fun repairTarget(target: DocId): List<EdgeRepair> {
+        val fast = index
+        if (fast != null) {
+            if (!fast.isReverseSeeded()) {
+                fast.ensureReverseSeeded(store)
+            }
+            val candidates = fast.candidatesFor(target)
+            if (candidates.isEmpty()) return emptyList()
+            val unprojected = unprojectedDocuments()
+            return candidates.mapNotNull { id ->
+                if (id == target || id in unprojected) return@mapNotNull null
+                val document = store.read(id) ?: return@mapNotNull null
+                val before = store.neighbors(document.id)
+                val derived = derive(document)
+                if (before.toSet() == derived.toSet()) return@mapNotNull null
+                store.replaceEdges(document.id, derived)
+                EdgeRepair(document, derived)
+            }
+        }
         val unprojected = unprojectedDocuments()
         return store.list().mapNotNull { ref ->
             if (ref.id == target || ref.id in unprojected) return@mapNotNull null
@@ -100,8 +127,32 @@ class EdgeDeriver(private val store: ContextStore) {
             ?.mapTo(mutableSetOf()) { it.documentId }
             ?: emptySet()
 
-    fun resolve(target: String): DocId? =
-        LinkResolver.resolve(target, exists = { store.read(it) != null }, refs = store.list())
+    fun resolve(target: String): DocId? {
+        val fast = index
+        if (fast != null) {
+            fast.resolve(target)?.let { hit ->
+                // The index can hold an id the store no longer has (rename
+                // without an evict): one read keeps a stale entry from becoming
+                // a phantom edge.
+                if (store.read(hit) != null) return hit
+                fast.evictResolve(hit)
+                fast.resolve(target)?.let { retry ->
+                    if (store.read(retry) != null) return retry
+                    fast.evictResolve(retry)
+                }
+            }
+            // Exact external write not yet tracked: one read, no catalog scan.
+            // Trailing misses stay unresolved until the target is indexed, at
+            // which point repair (via the reverse map) fixes the referrer.
+            val trimmed = target.trim()
+            if (trimmed.isEmpty()) return null
+            val key = LinkResolver.normalize(target)
+            if (key.isEmpty()) return null
+            val direct = runCatching { DocId(key) }.getOrNull() ?: return null
+            return if (store.read(direct) != null) direct else null
+        }
+        return LinkResolver.resolve(target, exists = { store.read(it) != null }, refs = store.list())
+    }
 
     private fun relFor(key: String): RelType? =
         when (key) {

@@ -500,6 +500,7 @@ class QueryFacade(
                 // hear about both: leaving the entry under `from` would let a read
                 // keep answering from a document that has moved.
                 overlay.remove(from)
+                indexer.forget(from)
                 val moved = store.read(to)
                 if (moved == null) return@withLock revision
                 val operations = store.projectionOperations()

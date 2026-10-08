@@ -19,6 +19,23 @@ import gokorei.tanseki.core.domain.DocRef
  * alone the ones it did, and the graph would rot without an error.
  */
 object LinkResolver {
+    /**
+     * Normalized lookup form of a reference target: surrounding whitespace,
+     * leading `./` and `/`, and one trailing `.md` (any case) removed.
+     *
+     * This is the key both indexes use: a source is stored under
+     * [normalize] of each value it carries, and a target is looked up under
+     * the suffixes of its id. `[[notes]]`, `notes.md`, `./notes.md` and
+     * `/notes.md` therefore meet at `notes`.
+     */
+    fun normalize(target: String): String = target.trim().linkForm()
+
+    /** Suffixes of [id] that a reference may name: `a/b/c` -> `a/b/c`, `b/c`, `c`. */
+    fun suffixes(id: DocId): List<String> {
+        val segments = id.value.split('/')
+        return (0 until segments.size).map { segments.subList(it, segments.size).joinToString("/") }
+    }
+
     fun resolve(
         target: String,
         exists: (DocId) -> Boolean,

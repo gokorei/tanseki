@@ -38,15 +38,38 @@ class Indexer(
      */
     private val changeFeed: ChangeFeed? = null
 ) {
-    private val edgeDeriver = EdgeDeriver(store)
+    private val referenceIndex = ReferenceIndex()
+    private val edgeDeriver = EdgeDeriver(store, referenceIndex)
 
-    fun index(doc: Document) {
+    /** Derive without touching the Lookup; used by bulk staging on an already-seeded index. */
+    fun derive(doc: Document) = edgeDeriver.derive(doc)
+
+    /** Bulk seed from documents already in hand: no extra store reads. */
+    fun seedFrom(documents: List<Document>) = referenceIndex.seedFrom(documents)
+
+    fun index(doc: Document) = indexInternal(doc, repair = true)
+
+    /**
+     * Index without repairing referrers. For a bulk load where every document
+     * is already in the store, derivation against the seeded resolve map is
+     * already correct, so per-document repair is pure overhead. The batch needs
+     * no closing repair pass when nothing in it is the link target of anything
+     * else in it — the backfill case — and even with intra-batch links the
+     * seeded derivation already resolves them.
+     */
+    fun indexWithoutRepair(doc: Document) = indexInternal(doc, repair = false)
+
+    private fun indexInternal(doc: Document, repair: Boolean) {
         val startedAt = System.nanoTime()
         try {
+            referenceIndex.ensureResolveSeeded(store)
+            referenceIndex.track(doc)
             val edges = edgeDeriver.reconcile(doc)
             lookup.index(doc, edges)
-            edgeDeriver.repairTarget(doc.id).forEach { repair ->
-                lookup.index(repair.document, repair.edges)
+            if (repair) {
+                edgeDeriver.repairTarget(doc.id).forEach { repaired ->
+                    lookup.index(repaired.document, repaired.edges)
+                }
             }
 
             var chunks = 0
@@ -69,9 +92,17 @@ class Indexer(
     }
 
     fun remove(id: DocId) {
+        referenceIndex.ensureResolveSeeded(store)
+        // Evict the target before re-deriving referrers so they unresolve
+        // instead of re-resolving to the deleted document.
+        referenceIndex.evictResolve(id)
         edgeDeriver.repairTarget(id).forEach { repair ->
             lookup.index(repair.document, repair.edges)
         }
+        referenceIndex.evictSource(id)
+        // Forget the resolve entry entirely once repair no longer needs the
+        // suffixes (evictResolve already dropped them; untrack is belt-and-braces
+        // for any path entry left behind).
         // Read ownership before the document is gone: after lookup.remove there is
         // nothing left to scope a delete event by, and an unscoped delete would
         // tell a subscriber about a collection it cannot read.
@@ -91,6 +122,9 @@ class Indexer(
             }
         }
     }
+
+    /** Forget `id` entirely (rename source): resolve and reverse entries dropped. */
+    fun forget(id: DocId) = referenceIndex.untrack(id)
 
     /**
      * Announces a committed index. Never allowed to fail the write: the document

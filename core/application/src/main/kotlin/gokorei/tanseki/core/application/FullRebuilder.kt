@@ -64,7 +64,6 @@ class FullRebuilder(
     private val logger: TansekiLogger = TansekiLogger.Noop
 ) {
     private val projectionWorker = ProjectionWorker(store, indexer, logger)
-    private val edgeDeriver = EdgeDeriver(store)
 
     @Synchronized
     fun rebuild(onProgress: (RebuildProgress) -> Unit = {}): FullRebuildReport {
@@ -109,6 +108,10 @@ class FullRebuilder(
             )
         }
 
+        // All documents are already in the store, so derivation against the
+        // seeded resolve map is already correct: no per-document repair pass.
+        indexer.seedFrom(documents)
+
         val staged: Map<DocId, List<Edge>>
         when (val staging = stageEdges(documents, onProgress)) {
             is Staging.Failed -> {
@@ -137,7 +140,7 @@ class FullRebuilder(
         var projectionCompleted = 0
         documents.forEachIndexed { index, document ->
             try {
-                indexer.index(document)
+                indexer.indexWithoutRepair(document)
                 indexedDocuments++
                 projectionCompleted += projectionWorker.completeCurrent(document.id, document.contentHash)
             } catch (error: Exception) {
@@ -238,7 +241,7 @@ class FullRebuilder(
             onProgress(RebuildProgress(RebuildPhase.LOADING, index + 1, documents.size, document.id.value))
             try {
                 val current = store.neighbors(document.id)
-                val derived = edgeDeriver.derive(document)
+                val derived = indexer.derive(document)
                 if (current.toSet() != derived.toSet()) rewritten++
                 staged[document.id] = derived
             } catch (error: Exception) {
