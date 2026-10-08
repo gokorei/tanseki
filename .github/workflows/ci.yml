@@ -41,6 +41,21 @@ jobs:
         with:
           cache-read-only: false
 
+      - name: Install the pinned pijul
+        # Vault tests and runtime paths shell out to the `pijul` binary (see
+        # CONTRIBUTING.md), so the main build carries the same pin as the
+        # dedicated pijul job rather than skipping that coverage. `libsodium-dev`
+        # is a compile-time input of `libsodium-sys`, which the runner image
+        # does not ship.
+        env:
+          PIJUL_VERSION: 1.0.0-beta.24
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsodium-dev pkg-config
+          cargo install --root "$HOME/.local" "pijul" --version "=$PIJUL_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       # Named explicitly, and ahead of `build`, so the contract gates have their
       # own line in the log. `build` runs them too — the root `check` lifecycle
       # aggregates all of them — but a gate that is only reachable through an
@@ -190,7 +205,17 @@ jobs:
         # without an identity ("Cannot parse public key"). A fresh runner has
         # none, so the suite would fail for a reason that has nothing to do with
         # the adapter. `--no-link` keeps the identity offline-only.
-        run: pijul identity new --no-link --email "ci@gokorei.dev" --display-name "Tanseki CI"
+        # `pijul identity new` still talks to an SSH agent even with `--no-link`
+        # ("SSH agent error: SSH_AUTH_SOCK not found" without one), so an
+        # ephemeral agent is started here and its socket exported to every later
+        # step through GITHUB_ENV — the adapter tests and the daemon smoke test
+        # below both record through it.
+        run: |
+          set -euo pipefail
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          pijul identity new --no-link --email "ci@gokorei.dev" --display-name "Tanseki CI"
 
       - name: Drive PijulCliClient against the real binary
         # The stubbed unit tests cannot catch a flag the pinned release rejects,
