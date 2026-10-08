@@ -1,0 +1,51 @@
+name: Publish core artifacts
+
+# Hosted coordinates for downstream consumers (ticket VQT2D11G). A version tag
+# is the release: pushing v<tansekiVersion> publishes dev.gokorei:core-{domain,
+# ports,text} to GitHub Packages. Kept separate from ci.yml so a release does
+# not re-run the container, pijul, and audit jobs that already passed on main.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-core:
+    name: publish core to GitHub Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: The tag must name the version it publishes
+        run: |
+          set -euo pipefail
+          version="$(grep '^tansekiVersion=' gradle.properties | cut -d= -f2)"
+          test "${GITHUB_REF_NAME}" = "v${version}" || {
+            echo "::error::tag ${GITHUB_REF_NAME} does not match tansekiVersion=${version} (expected v${version})"
+            exit 1
+          }
+          echo "releasing ${GITHUB_REF_NAME} as dev.gokorei:core-*:$version"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
+        with:
+          cache-read-only: false
+
+      - name: Publish core-domain, core-ports, core-text
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew --no-daemon \
+            :core:domain:publishMavenPublicationToGitHubPackagesRepository \
+            :core:ports:publishMavenPublicationToGitHubPackagesRepository \
+            :core:text:publishMavenPublicationToGitHubPackagesRepository
