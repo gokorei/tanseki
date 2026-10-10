@@ -60,6 +60,23 @@ class PendingOverlayTest {
     }
 
     @Test
+    fun `a filter query matches documents across multiple collections`() {
+        val overlay = PendingOverlay()
+        overlay.put(doc("a", "hello").copy(collection = Collection("vault")))
+        overlay.put(doc("b", "hello").copy(collection = Collection("archive")))
+        overlay.put(doc("c", "hello").copy(collection = Collection("other")))
+
+        val matched =
+            overlay
+                .merge(
+                    emptyList(),
+                    "hello",
+                    Filters(collections = setOf("vault", "archive"))
+                ).map { it.id }
+        assertEquals(listOf(DocId("a"), DocId("b")), matched)
+    }
+
+    @Test
     fun `a blank query with nothing to filter on still matches nothing`() {
         val overlay = PendingOverlay()
         overlay.put(doc("a", "hello world"))

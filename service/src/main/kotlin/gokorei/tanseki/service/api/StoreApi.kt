@@ -2456,36 +2456,9 @@ private suspend fun handleSearch(call: ApplicationCall, deps: StoreApiDeps) {
     }
     if (collections != null && !call.ensureScope(collections)) return
     val searchFilters = Filters.fromStrings(tags = tags, frontmatter = frontmatter)
-    val (page, hasMore) =
-        if (collections == null) {
-            val raw = search(deps.facade, query, mode, searchFilters, limit, offset)
-            raw.take(limit) to (raw.size > limit)
-        } else {
-            // Each collection is searched from its start with no per-collection
-            // offset. `offset` is a position in the globally ranked result set,
-            // so applying it per collection would skip that many hits in every
-            // collection and drop globally-ranked documents the caller should
-            // see (and hasMore would lie, because each collection returns
-            // limit+1). Fetch `offset+limit` (one past the window) from each,
-            // merge, sort globally, then slice.
-            val merged =
-                collections
-                    .sorted()
-                    .flatMap { allowed ->
-                        search(
-                            deps.facade,
-                            query,
-                            mode,
-                            searchFilters.copy(collections = setOf(allowed)),
-                            offset + limit,
-                            0
-                        )
-                    }.sortedWith(
-                        compareByDescending<gokorei.tanseki.core.ports.Hit> { it.score }
-                            .thenBy { it.id.value }
-                    )
-            merged.drop(offset).take(limit) to (merged.size > offset + limit)
-        }
+    val targetFilters = if (collections == null) searchFilters else searchFilters.copy(collections = collections)
+    val raw = search(deps.facade, query, mode, targetFilters, limit, offset)
+    val (page, hasMore) = raw.take(limit) to (raw.size > limit)
     call.respond(
         SearchResponse(
             hits = page.map { it.toDto() },

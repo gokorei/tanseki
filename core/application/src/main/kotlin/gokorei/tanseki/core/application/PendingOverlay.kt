@@ -317,7 +317,7 @@ class PendingOverlay(
         document: Document,
         filters: Filters
     ): Boolean =
-        filters.collections.all { it == document.collection.value } &&
+        (filters.collections.isEmpty() || document.collection.value in filters.collections) &&
             document.frontmatter.tags.containsAll(filters.tags) &&
             filters.frontmatter.all { (key, value) -> document.frontmatter.values[key] == value }
 

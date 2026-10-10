@@ -127,6 +127,7 @@ class EdgeDeriver(
             ?.mapTo(mutableSetOf()) { it.documentId }
             ?: emptySet()
 
+    @Suppress("NestedBlockDepth")
     fun resolve(target: String): DocId? {
         val fast = index
         if (fast != null) {

@@ -1,6 +1,7 @@
 package gokorei.tanseki.cli.transfer
 
 import gokorei.tanseki.core.application.EdgeDeriver
+import gokorei.tanseki.core.application.ReferenceIndex
 import gokorei.tanseki.core.domain.BlobRef
 import gokorei.tanseki.core.domain.Collection
 import gokorei.tanseki.core.domain.DocId
@@ -201,7 +202,9 @@ class DirectoryImporter(
      * modes instead of depending on write order.
      */
     private fun deriveEdges(target: ContextStore, planned: Map<DocId, Document>, dryRun: Boolean): EdgeCounts {
-        val deriver = EdgeDeriver(if (dryRun) OverlayStore(target, planned) else target)
+        val effectiveStore = if (dryRun) OverlayStore(target, planned) else target
+        val refIndex = ReferenceIndex().apply { ensureResolveSeeded(effectiveStore) }
+        val deriver = EdgeDeriver(effectiveStore, refIndex)
         var edges = 0
         var unresolved = 0
         val failures = mutableListOf<TransferFailure>()

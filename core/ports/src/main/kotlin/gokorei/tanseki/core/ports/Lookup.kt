@@ -127,5 +127,8 @@ interface Lookup {
     fun backlinks(id: DocId, rel: RelType? = null): List<DocId> =
         throw UnsupportedStoreOperationException("lookup does not support backlinks")
 
+    /** Flushes in-memory mutation buffers to make them visible to readers and durable. */
+    fun flush(): Unit = Unit
+
     fun rebuild(store: ContextStore)
 }

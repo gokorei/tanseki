@@ -91,75 +91,78 @@ class ProjectionWorker(
      * its budget across restarts instead of getting a free retry every time.
      */
     private val retryAfter = LinkedHashMap<String, Instant>()
+    private val drainLock = Any()
 
-    fun drain(limit: Int = 100): ProjectionWorkerReport {
-        val instant = now()
-        val outbox = store.projectionOperations() ?: return ProjectionWorkerReport()
-        val operations =
-            outbox
-                .pendingLive(Int.MAX_VALUE)
-                .filterNot { retryAfter[it.id]?.let { ready -> ready > instant } == true }
-                .take(limit.coerceAtLeast(0))
-        var attempted = 0
-        var completed = 0
-        var failed = 0
-        var skipped = 0
-        var lostOwnership = 0
-        val indexed = linkedMapOf<DocId, String>()
-        val removed = linkedSetOf<DocId>()
-        val deadLettered = mutableListOf<ProjectionOperation>()
+    fun drain(limit: Int = 100): ProjectionWorkerReport =
+        synchronized(drainLock) {
+            val instant = now()
+            val outbox = store.projectionOperations() ?: return ProjectionWorkerReport()
+            val fetchLimit = (limit.coerceAtLeast(0) + retryAfter.size).coerceAtLeast(100)
+            val operations =
+                outbox
+                    .pendingLive(fetchLimit)
+                    .filterNot { retryAfter[it.id]?.let { ready -> ready > instant } == true }
+                    .take(limit.coerceAtLeast(0))
+            var attempted = 0
+            var completed = 0
+            var failed = 0
+            var skipped = 0
+            var lostOwnership = 0
+            val indexed = linkedMapOf<DocId, String>()
+            val removed = linkedSetOf<DocId>()
+            val deadLettered = mutableListOf<ProjectionOperation>()
 
-        operations.forEach { operation ->
-            // Ownership is taken before any work. Skipping an operation another
-            // worker holds is the point: write-time draining, reconciliation and the
-            // watcher each own a ProjectionWorker, and without a claim two of them
-            // deliver the same operation and finish out of order.
-            val claim = outbox.claim(operation.id, workerId, lease, instant)
-            if (claim == null) {
-                skipped++
-                return@forEach
-            }
-            attempted++
-            val attempt = processSafely(operation, claim)
-            val error = attempt.error
-            if (error == null) {
-                if (recordSuccess(operation, attempt.outcome, claim, indexed, removed)) {
-                    retryAfter.remove(operation.id)
-                    completed++
-                } else {
-                    // The lease lapsed or was taken over mid-delivery. The index
-                    // write already happened, so this is not a lost delivery — but
-                    // the record is not ours to delete, and reporting success would
-                    // be a claim we cannot back up.
-                    lostOwnership++
+            operations.forEach { operation ->
+                // Ownership is taken before any work. Skipping an operation another
+                // worker holds is the point: write-time draining, reconciliation and the
+                // watcher each own a ProjectionWorker, and without a claim two of them
+                // deliver the same operation and finish out of order.
+                val claim = outbox.claim(operation.id, workerId, lease, instant)
+                if (claim == null) {
+                    skipped++
+                    return@forEach
                 }
-            } else {
-                failed++
-                logFailure(operation, error)
-                // Hand the operation back immediately rather than making the next
-                // worker wait out the lease for a failure we already know about.
-                outbox.releaseClaim(claim)
-                if (recordFailure(operation, error)) {
-                    deadLettered += operation
-                    retryAfter.remove(operation.id)
+                attempted++
+                val attempt = processSafely(operation, claim)
+                val error = attempt.error
+                if (error == null) {
+                    if (recordSuccess(operation, attempt.outcome, claim, indexed, removed)) {
+                        retryAfter.remove(operation.id)
+                        completed++
+                    } else {
+                        // The lease lapsed or was taken over mid-delivery. The index
+                        // write already happened, so this is not a lost delivery — but
+                        // the record is not ours to delete, and reporting success would
+                        // be a claim we cannot back up.
+                        lostOwnership++
+                    }
                 } else {
-                    retryAfter[operation.id] = instant + backoffFor(operation)
-                    trimRetryAfter()
+                    failed++
+                    logFailure(operation, error)
+                    // Hand the operation back immediately rather than making the next
+                    // worker wait out the lease for a failure we already know about.
+                    outbox.releaseClaim(claim)
+                    if (recordFailure(operation, error)) {
+                        deadLettered += operation
+                        retryAfter.remove(operation.id)
+                    } else {
+                        retryAfter[operation.id] = instant + backoffFor(operation)
+                        trimRetryAfter()
+                    }
                 }
             }
+
+            return ProjectionWorkerReport(
+                attempted = attempted,
+                completed = completed,
+                failed = failed,
+                skipped = skipped,
+                lostOwnership = lostOwnership,
+                indexed = indexed,
+                removed = removed,
+                deadLettered = deadLettered
+            )
         }
-
-        return ProjectionWorkerReport(
-            attempted = attempted,
-            completed = completed,
-            failed = failed,
-            skipped = skipped,
-            lostOwnership = lostOwnership,
-            indexed = indexed,
-            removed = removed,
-            deadLettered = deadLettered
-        )
-    }
 
     /**
      * Exponential backoff from the operation's durable attempt count, capped.

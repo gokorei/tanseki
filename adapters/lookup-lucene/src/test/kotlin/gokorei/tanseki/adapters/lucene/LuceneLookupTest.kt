@@ -566,6 +566,39 @@ class LuceneLookupTest {
         }
     }
 
+    @Test
+    fun `filters match documents across multiple collections`() {
+        LuceneLookup().use { lookup ->
+            lookup.index(doc("a", "tanseki system", collection = "vault"), emptyList())
+            lookup.index(doc("b", "tanseki system", collection = "archive"), emptyList())
+            lookup.index(doc("c", "tanseki system", collection = "other"), emptyList())
+
+            val hits = lookup.searchText("tanseki", Filters(collections = setOf("vault", "archive")), 10)
+            assertEquals(setOf(DocId("a"), DocId("b")), hits.map { it.id }.toSet())
+        }
+    }
+
+    @Test
+    fun `concurrent searches execute without contention or errors`() {
+        LuceneLookup().use { lookup ->
+            for (i in 0 until 50) {
+                lookup.index(doc("doc-$i", "concurrent content $i"), emptyList())
+            }
+
+            val threads =
+                (0 until 8).map { threadIdx ->
+                    Thread {
+                        for (q in 0 until 50) {
+                            val hits = lookup.searchText("content", Filters(), 10)
+                            assertTrue(hits.isNotEmpty())
+                        }
+                    }
+                }
+            threads.forEach { it.start() }
+            threads.forEach { it.join() }
+        }
+    }
+
     private class FakeStore : ContextStore {
         private val documents = LinkedHashMap<DocId, Document>()
         private val edges = mutableMapOf<DocId, List<Edge>>()

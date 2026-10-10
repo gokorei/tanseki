@@ -625,7 +625,10 @@ class MeiliLookup private constructor(
 
     private fun filterExpression(filters: Filters): String? {
         val parts = mutableListOf<String>()
-        filters.collections.forEach { parts += "collection = ${quote(it)}" }
+        if (filters.collections.isNotEmpty()) {
+            val collectionExpr = filters.collections.joinToString(" OR ") { "collection = ${quote(it)}" }
+            parts += "($collectionExpr)"
+        }
         filters.tags.forEach { parts += "tags = ${quote(it)}" }
         filters.frontmatter.forEach { (key, value) -> parts += "fm_keys = ${quote("$key=${value.encode()}")}" }
         return parts.takeIf { it.isNotEmpty() }?.joinToString(" AND ")

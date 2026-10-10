@@ -367,34 +367,37 @@ class QueryFacade(
         ifRevision: RevisionId? = null
     ): Revision =
         withContext(io) {
-            mutationLock.withLock {
-                val revision = store.write(doc, message, author, ifRevision)
-                val canonical = store.read(doc.id) ?: doc
-                overlay.put(canonical)
-                val operations = store.projectionOperations()
-                val edges =
-                    if (operations == null) {
-                        indexer.index(canonical)
-                        overlay.markProjected(canonical.id, canonical.contentHash)
-                        store.neighbors(canonical.id).size
-                    } else {
-                        operations.enqueue(
-                            ProjectionOperation.upsert(
-                                canonical,
-                                revision.revision,
-                                clock.now(),
-                                canonical.contentHash
-                            )
+            val (revision, canonical, operations) =
+                mutationLock.withLock {
+                    val rev = store.write(doc, message, author, ifRevision)
+                    val can = store.read(doc.id) ?: doc
+                    overlay.put(can)
+                    val ops = store.projectionOperations()
+                    ops?.enqueue(
+                        ProjectionOperation.upsert(
+                            can,
+                            rev.revision,
+                            clock.now(),
+                            can.contentHash
                         )
-                        projectionWorker.drain()
-                        store.neighbors(canonical.id).size
-                    }
-                logger.info(
-                    "write committed",
-                    mapOf("doc" to canonical.id.value, "revision" to revision.revision.value, "edges" to edges)
-                )
-                revision
-            }
+                    )
+                    Triple(rev, can, ops)
+                }
+
+            val edges =
+                if (operations == null) {
+                    indexer.index(canonical)
+                    overlay.markProjected(canonical.id, canonical.contentHash)
+                    store.neighbors(canonical.id).size
+                } else {
+                    projectionWorker.drain()
+                    store.neighbors(canonical.id).size
+                }
+            logger.info(
+                "write committed",
+                mapOf("doc" to canonical.id.value, "revision" to revision.revision.value, "edges" to edges)
+            )
+            revision
         }
 
     /**
@@ -464,26 +467,31 @@ class QueryFacade(
      */
     suspend fun restore(id: DocId, message: String, author: String, ifRevision: RevisionId? = null): Revision =
         withContext(io) {
-            mutationLock.withLock {
-                val revision = store.restore(id, message, author, ifRevision)
-                val restored = store.read(id)
-                if (restored == null) return@withLock revision
-                val operations = store.projectionOperations()
+            val (revision, restored, operations) =
+                mutationLock.withLock {
+                    val rev = store.restore(id, message, author, ifRevision)
+                    val rest = store.read(id)
+                    if (rest != null) {
+                        overlay.put(rest)
+                    }
+                    Triple(rev, rest, store.projectionOperations())
+                }
+
+            if (restored != null) {
                 if (operations == null) {
                     indexer.index(restored)
-                    overlay.put(restored)
                     overlay.markProjected(restored.id, restored.contentHash)
                 } else {
                     // The store already enqueued an upsert; let the worker apply it.
                     projectionWorker.drain()
                     overlay.markProjected(restored.id, restored.contentHash)
                 }
-                logger.info(
-                    "restore committed",
-                    mapOf("doc" to id.value, "revision" to revision.revision.value)
-                )
-                revision
             }
+            logger.info(
+                "restore committed",
+                mapOf("doc" to id.value, "revision" to revision.revision.value)
+            )
+            revision
         }
 
     suspend fun rename(
@@ -494,19 +502,21 @@ class QueryFacade(
         ifRevision: RevisionId? = null
     ): Revision =
         withContext(io) {
-            mutationLock.withLock {
-                val revision = store.rename(from, to, message, author, ifRevision)
-                // The old id is gone and the new one exists, so the overlay has to
-                // hear about both: leaving the entry under `from` would let a read
-                // keep answering from a document that has moved.
-                overlay.remove(from)
-                indexer.forget(from)
-                val moved = store.read(to)
-                if (moved == null) return@withLock revision
-                val operations = store.projectionOperations()
+            val (revision, moved, operations) =
+                mutationLock.withLock {
+                    val rev = store.rename(from, to, message, author, ifRevision)
+                    overlay.remove(from)
+                    val mov = store.read(to)
+                    if (mov != null) {
+                        overlay.put(mov)
+                    }
+                    Triple(rev, mov, store.projectionOperations())
+                }
+
+            indexer.forget(from)
+            if (moved != null) {
                 if (operations == null) {
                     indexer.index(moved)
-                    overlay.put(moved)
                     overlay.markProjected(moved.id, moved.contentHash)
                 } else {
                     // The store enqueued the upserts, including for every document
@@ -514,39 +524,41 @@ class QueryFacade(
                     projectionWorker.drain()
                     overlay.markProjected(moved.id, moved.contentHash)
                 }
-                logger.info(
-                    "rename committed",
-                    mapOf(
-                        "from" to from.value,
-                        "to" to to.value,
-                        "revision" to revision.revision.value
-                    )
-                )
-                revision
             }
+            logger.info(
+                "rename committed",
+                mapOf(
+                    "from" to from.value,
+                    "to" to to.value,
+                    "revision" to revision.revision.value
+                )
+            )
+            revision
         }
 
     suspend fun delete(id: DocId, message: String, author: String, ifRevision: RevisionId? = null): Revision =
         withContext(io) {
-            mutationLock.withLock {
-                val revision = store.delete(id, message, author, ifRevision)
-                overlay.remove(id)
-                val operations = store.projectionOperations()
-                if (operations == null) {
-                    indexer.remove(id)
-                    overlay.markDeleted(id)
-                } else {
-                    projectionWorker.drain()
+            val (revision, operations) =
+                mutationLock.withLock {
+                    val rev = store.delete(id, message, author, ifRevision)
+                    overlay.remove(id)
+                    rev to store.projectionOperations()
                 }
-                logger.info("delete committed", mapOf("doc" to id.value, "revision" to revision.revision.value))
-                revision
+
+            if (operations == null) {
+                indexer.remove(id)
+                overlay.markDeleted(id)
+            } else {
+                projectionWorker.drain()
             }
+            logger.info("delete committed", mapOf("doc" to id.value, "revision" to revision.revision.value))
+            revision
         }
 
     fun projectionBacklog() = projectionWorker.backlog()
 
     suspend fun reconcileProjections(limit: Int = 100): ProjectionWorkerReport =
-        withContext(io) { mutationLock.withLock { projectionWorker.drain(limit) } }
+        withContext(io) { projectionWorker.drain(limit) }
 
     private fun pageBounds(limit: Int, offset: Int) {
         if (limit !in 1..RequestLimits.MAX_PAGE_LIMIT) {

@@ -21,6 +21,7 @@ import gokorei.tanseki.core.text.MarkdownParser
  * has no entry on the target side, so indexing such a document costs only its
  * own derivation.
  */
+@Suppress("TooManyFunctions")
 class ReferenceIndex {
     private val lock = Any()
 

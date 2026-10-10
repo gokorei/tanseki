@@ -18,7 +18,6 @@ import org.apache.lucene.document.KnnFloatVectorField
 import org.apache.lucene.document.StoredField
 import org.apache.lucene.document.StringField
 import org.apache.lucene.document.TextField
-import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.index.Term
@@ -31,6 +30,8 @@ import org.apache.lucene.search.KnnFloatVectorQuery
 import org.apache.lucene.search.MatchAllDocsQuery
 import org.apache.lucene.search.Query
 import org.apache.lucene.search.ScoreDoc
+import org.apache.lucene.search.SearcherFactory
+import org.apache.lucene.search.SearcherManager
 import org.apache.lucene.search.TermQuery
 import org.apache.lucene.store.ByteBuffersDirectory
 import org.apache.lucene.store.Directory
@@ -62,7 +63,22 @@ class LuceneLookup(
                 codec = vectorConfig.codec()
             }
         )
+    private val searcherManager = SearcherManager(writer, SearcherFactory())
+    private val writeLock = Any()
     private val parser = MultiFieldQueryParser(arrayOf(FIELD_TITLE, FIELD_CONTENT, FIELD_TAGS), analyzer)
+
+    private inline fun <T> withSearcher(action: (IndexSearcher) -> T): T {
+        val searcher = searcherManager.acquire()
+        return try {
+            action(searcher)
+        } finally {
+            searcherManager.release(searcher)
+        }
+    }
+
+    private fun refreshReaders() {
+        searcherManager.maybeRefreshBlocking()
+    }
 
     /**
      * Indexes every non-contract frontmatter key as a filterable term.
@@ -84,10 +100,11 @@ class LuceneLookup(
         }
     }
 
-    @Synchronized
     override fun index(doc: Document, edges: List<Edge>) {
-        indexWithoutCommit(doc, edges)
-        writer.commit()
+        synchronized(writeLock) {
+            indexWithoutCommit(doc, edges)
+            refreshReaders()
+        }
         logger.debug("lookup index", mapOf("doc" to doc.id.value, "edges" to edges.size))
     }
 
@@ -119,12 +136,10 @@ class LuceneLookup(
         }
     }
 
-    @Synchronized
     override fun writeVectors(doc: Document, model: String, vectors: List<FloatArray>) {
         writeVectors(doc, model, vectors, 0)
     }
 
-    @Synchronized
     fun upsertVector(doc: Document, chunk: Int, vector: FloatArray) {
         writeVectors(doc, "legacy", listOf(vector), chunk)
     }
@@ -136,40 +151,40 @@ class LuceneLookup(
         firstChunk: Int
     ) {
         vectors.forEach { vectorConfig.requireDimension(it.size, "stored vector") }
-        deleteVectors(doc.id)
-        vectors.forEachIndexed { index, vector ->
-            val chunk = firstChunk + index
-            val vectorDoc = LuceneDocument()
-            vectorDoc.add(StringField(FIELD_ID, "${doc.id.value}#$chunk", Field.Store.YES))
-            vectorDoc.add(StringField(FIELD_KIND, "vector", Field.Store.YES))
-            vectorDoc.add(StringField(FIELD_DOC_ID, doc.id.value, Field.Store.YES))
-            vectorDoc.add(StringField(FIELD_MODEL, model, Field.Store.YES))
-            vectorDoc.add(StringField(FIELD_COLLECTION, doc.collection.value, Field.Store.YES))
-            vectorDoc.add(StoredField(FIELD_VECTOR_CONTENT, doc.content))
-            doc.frontmatter.tags.forEach { vectorDoc.add(StringField(FIELD_TAGS, it, Field.Store.YES)) }
-            indexFrontmatter(vectorDoc, doc)
-            vectorDoc.add(StoredField(FIELD_CHUNK, chunk))
-            vectorDoc.add(KnnFloatVectorField(FIELD_VECTOR, vector, vectorConfig.similarity))
-            writer.addDocument(vectorDoc)
+        synchronized(writeLock) {
+            deleteVectors(doc.id)
+            vectors.forEachIndexed { index, vector ->
+                val chunk = firstChunk + index
+                val vectorDoc = LuceneDocument()
+                vectorDoc.add(StringField(FIELD_ID, "${doc.id.value}#$chunk", Field.Store.YES))
+                vectorDoc.add(StringField(FIELD_KIND, "vector", Field.Store.YES))
+                vectorDoc.add(StringField(FIELD_DOC_ID, doc.id.value, Field.Store.YES))
+                vectorDoc.add(StringField(FIELD_MODEL, model, Field.Store.YES))
+                vectorDoc.add(StringField(FIELD_COLLECTION, doc.collection.value, Field.Store.YES))
+                vectorDoc.add(StoredField(FIELD_VECTOR_CONTENT, doc.content))
+                doc.frontmatter.tags.forEach { vectorDoc.add(StringField(FIELD_TAGS, it, Field.Store.YES)) }
+                indexFrontmatter(vectorDoc, doc)
+                vectorDoc.add(StoredField(FIELD_CHUNK, chunk))
+                vectorDoc.add(KnnFloatVectorField(FIELD_VECTOR, vector, vectorConfig.similarity))
+                writer.addDocument(vectorDoc)
+            }
+            refreshReaders()
         }
-        writer.commit()
     }
 
-    @Synchronized
     override fun remove(id: DocId) {
-        deleteOwned(id)
-        writer.deleteDocuments(Term(FIELD_EDGE_DST, id.value))
-        writer.commit()
+        synchronized(writeLock) {
+            deleteOwned(id)
+            writer.deleteDocuments(Term(FIELD_EDGE_DST, id.value))
+            refreshReaders()
+        }
     }
 
-    @Synchronized
-    override fun indexedIds(): Set<DocId> {
-        val reader = reader() ?: return emptySet()
-        return reader.use { open ->
-            val searcher = IndexSearcher(open)
+    override fun indexedIds(): Set<DocId> =
+        withSearcher { searcher ->
             val query = MatchAllDocsQuery()
             val count = searcher.count(query)
-            if (count == 0) return@use emptySet()
+            if (count == 0) return@withSearcher emptySet()
             searcher
                 .search(query, count)
                 .scoreDocs
@@ -177,12 +192,24 @@ class LuceneLookup(
                     runCatching { DocId(searcher.storedFields().document(scoreDoc.doc).get(FIELD_DOC_ID)) }.getOrNull()
                 }.toSet()
         }
+
+    override fun clear() {
+        synchronized(writeLock) {
+            writer.deleteAll()
+            writer.commit()
+            refreshReaders()
+        }
     }
 
-    @Synchronized
-    override fun clear() {
-        writer.deleteAll()
-        writer.commit()
+    override fun flush() {
+        refreshReaders()
+    }
+
+    fun commit() {
+        synchronized(writeLock) {
+            writer.commit()
+            refreshReaders()
+        }
     }
 
     /**
@@ -201,7 +228,6 @@ class LuceneLookup(
      * successful one. `limit` bounds the filtered case, as it does every other
      * page.
      */
-    @Synchronized
     override fun searchText(q: String, filters: Filters, limit: Int): List<Hit> {
         if (q.isBlank()) {
             val facets = filtersQuery(filters) ?: return emptyList()
@@ -239,7 +265,6 @@ class LuceneLookup(
         return terms
     }
 
-    @Synchronized
     override fun searchVector(v: FloatArray, filters: Filters, limit: Int): List<Hit> {
         vectorConfig.requireDimension(v.size, "query vector")
         // Lucene 9 fixes search-time ef internally; overfetching emulates the
@@ -260,50 +285,39 @@ class LuceneLookup(
         }
     }
 
-    @Synchronized
-    override fun traverse(id: DocId, rel: RelType, depth: Int): List<DocId> {
-        val visited = LinkedHashSet<DocId>()
-        var frontier = listOf(id)
-        repeat(depth.coerceAtLeast(0)) {
-            val next = mutableListOf<DocId>()
-            val reader = reader()
-            if (reader != null) {
-                reader.use { open ->
-                    val searcher = IndexSearcher(open)
-                    for (node in frontier) {
-                        val query =
-                            BooleanQuery
-                                .Builder()
-                                .add(TermQuery(Term(FIELD_EDGE_SRC, node.value)), BooleanClause.Occur.MUST)
-                                .add(TermQuery(Term(FIELD_EDGE_REL, rel.value)), BooleanClause.Occur.MUST)
-                                .build()
-                        searcher.search(query, MAX_RESULTS).scoreDocs.forEach { scoreDoc ->
-                            val stored = searcher.storedFields().document(scoreDoc.doc)
-                            val dst = stored.get(FIELD_EDGE_DST)?.let(::DocId) ?: return@forEach
-                            if (visited.add(dst)) next += dst
-                        }
+    override fun traverse(id: DocId, rel: RelType, depth: Int): List<DocId> =
+        withSearcher { searcher ->
+            val visited = LinkedHashSet<DocId>()
+            var frontier = listOf(id)
+            repeat(depth.coerceAtLeast(0)) {
+                val next = mutableListOf<DocId>()
+                for (node in frontier) {
+                    val query =
+                        BooleanQuery
+                            .Builder()
+                            .add(TermQuery(Term(FIELD_EDGE_SRC, node.value)), BooleanClause.Occur.MUST)
+                            .add(TermQuery(Term(FIELD_EDGE_REL, rel.value)), BooleanClause.Occur.MUST)
+                            .build()
+                    searcher.search(query, MAX_RESULTS).scoreDocs.forEach { scoreDoc ->
+                        val stored = searcher.storedFields().document(scoreDoc.doc)
+                        val dst = stored.get(FIELD_EDGE_DST)?.let(::DocId) ?: return@forEach
+                        if (visited.add(dst)) next += dst
                     }
                 }
+                frontier = next
             }
-            frontier = next
+            visited.toList()
         }
-        return visited.toList()
-    }
 
-    @Synchronized
-    override fun backlinks(id: DocId, rel: RelType?): List<DocId> {
-        val sources = LinkedHashSet<DocId>()
-        val open = reader() ?: return emptyList()
-        open.use {
-            val searcher = IndexSearcher(it)
+    override fun backlinks(id: DocId, rel: RelType?): List<DocId> =
+        withSearcher { searcher ->
+            val sources = LinkedHashSet<DocId>()
             val query =
                 BooleanQuery
                     .Builder()
                     .add(TermQuery(Term(FIELD_EDGE_DST, id.value)), BooleanClause.Occur.MUST)
                     .apply {
-                        if (rel !=
-                            null
-                        ) {
+                        if (rel != null) {
                             add(TermQuery(Term(FIELD_EDGE_REL, rel.value)), BooleanClause.Occur.FILTER)
                         }
                     }.build()
@@ -311,24 +325,28 @@ class LuceneLookup(
                 val stored = searcher.storedFields().document(scoreDoc.doc)
                 stored.get(FIELD_EDGE_SRC)?.let { sources.add(DocId(it)) }
             }
+            sources.toList()
         }
-        return sources.toList()
-    }
 
-    @Synchronized
     override fun rebuild(store: ContextStore) {
-        writer.deleteAll()
-        for (ref in store.list()) {
-            val doc = store.read(ref.id) ?: continue
-            indexWithoutCommit(doc, store.neighbors(ref.id))
+        synchronized(writeLock) {
+            writer.deleteAll()
+            for (ref in store.list()) {
+                val doc = store.read(ref.id) ?: continue
+                indexWithoutCommit(doc, store.neighbors(ref.id))
+            }
+            writer.commit()
+            refreshReaders()
         }
-        writer.commit()
     }
 
-    @Synchronized
     override fun close() {
-        writer.close()
-        directory.close()
+        synchronized(writeLock) {
+            searcherManager.close()
+            writer.commit()
+            writer.close()
+            directory.close()
+        }
     }
 
     private fun deleteOwned(id: DocId) {
@@ -359,7 +377,13 @@ class LuceneLookup(
     private fun filtersQuery(filters: Filters): Query? {
         if (filters.collections.isEmpty() && filters.tags.isEmpty() && filters.frontmatter.isEmpty()) return null
         val builder = BooleanQuery.Builder()
-        filters.collections.forEach { builder.add(TermQuery(Term(FIELD_COLLECTION, it)), BooleanClause.Occur.FILTER) }
+        if (filters.collections.isNotEmpty()) {
+            val collectionQuery = BooleanQuery.Builder()
+            filters.collections.forEach {
+                collectionQuery.add(TermQuery(Term(FIELD_COLLECTION, it)), BooleanClause.Occur.SHOULD)
+            }
+            builder.add(collectionQuery.build(), BooleanClause.Occur.FILTER)
+        }
         filters.tags.forEach { builder.add(TermQuery(Term(FIELD_TAGS, it)), BooleanClause.Occur.FILTER) }
         filters.frontmatter.forEach { (key, value) ->
             builder.add(TermQuery(Term("$FIELD_FRONTMATTER$key", value.encode())), BooleanClause.Occur.FILTER)
@@ -367,16 +391,13 @@ class LuceneLookup(
         return builder.build()
     }
 
-    private fun search(query: Query, limit: Int, terms: Set<String> = emptySet()): List<Hit> {
-        val reader = reader() ?: return emptyList()
-        reader.use { open ->
-            val searcher = IndexSearcher(open)
+    private fun search(query: Query, limit: Int, terms: Set<String> = emptySet()): List<Hit> =
+        withSearcher { searcher ->
             val top = searcher.search(query, limit)
-            return top.scoreDocs
+            top.scoreDocs
                 .mapNotNull { scoreDoc -> toHit(searcher, scoreDoc, terms) }
                 .sortedWith(compareByDescending<Hit> { it.score }.thenBy { it.id.value })
         }
-    }
 
     private fun toHit(searcher: IndexSearcher, scoreDoc: ScoreDoc, terms: Set<String>): Hit? {
         val stored = searcher.storedFields().document(scoreDoc.doc)
@@ -448,17 +469,6 @@ class LuceneLookup(
     }
 
     private data class Windowed(val snippet: String, val highlights: List<IntRange>)
-
-    /** Opens a reader, or null when the index has no segments yet (fresh vault). */
-    private fun reader(): DirectoryReader? =
-        try {
-            DirectoryReader.open(directory)
-        } catch (error: Exception) {
-            // An uncommitted or absent index is the expected fresh-vault case;
-            // anything else is worth a debug line rather than a silent empty.
-            logger.debug("lookup index reader unavailable", mapOf("error" to (error.message ?: "")))
-            null
-        }
 
     companion object {
         /** Opens (or creates) a durable on-disk index under [indexDir]. */

@@ -78,6 +78,17 @@ abstract class LookupContract {
 
     @Test
     @Suppress("FunctionNaming")
+    fun `filters match documents across multiple collections`() {
+        lookup.index(document("a", "tanseki", collection = "vault"), emptyList())
+        lookup.index(document("b", "tanseki", collection = "alternate"), emptyList())
+        lookup.index(document("c", "tanseki", collection = "third"), emptyList())
+
+        val hits = lookup.searchText("tanseki", Filters(collections = setOf("vault", "alternate")), 10)
+        assertEquals(setOf(DocId("a"), DocId("b")), hits.map { it.id }.toSet())
+    }
+
+    @Test
+    @Suppress("FunctionNaming")
     fun `filters narrow by frontmatter`() {
         lookup.index(document("a", "shared token", extra = mapOf("repo" to "org/repo")), emptyList())
         lookup.index(document("b", "shared token", extra = mapOf("repo" to "org/other")), emptyList())
