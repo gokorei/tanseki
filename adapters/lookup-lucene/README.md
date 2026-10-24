@@ -49,12 +49,39 @@ snapshot on one machine — re-run to compare shapes, not to quote absolutes.
 | rich | 64 | 32 | 200 | 50 | 1.000 | 1956 | 2.561 |
 | compact | 16 | 8 | 20 | — | 0.985 | 1221 | 0.590 |
 
-Reading: the default shape is near-exact at this scale; lean trades ~12
+Reading: the shipped default shape is near-exact at this scale; lean trades ~12
 points of recall for a smaller graph; rich closes the gap with a denser
 graph plus overfetch. Compact shows the dimension axis: at the same lean
 shape, dim 16 searches ~3x faster than dim 64 and recalls better (0.985 vs
 0.875) because lower-dimensional spaces are easier for the graph — at the
 price of whatever quality the embedding model loses by emitting fewer dims.
+
+The shipped default (`LuceneVectorConfig()` / `LuceneVectorConfig.DEFAULT`:
+maxConn 16, beamWidth 100, no dimension pin, no overfetch) is the `default`
+row above: 0.995 recall at 1.149 ms/query. Rich buys only +0.005 recall for
+~2.2x query latency and ~45% more index time, so it is not the default; lean
+loses ~12 points of recall for no latency win. The values are pinned as
+literals so a Lucene upgrade cannot silently retune the index.
+
+## Changing the default
+
+Index-shape knobs (`maxConn`, `beamWidth`, `dimensions`) apply to newly
+written segments only — retune an existing on-disk index with a `rebuild`
+before the whole index uses the new shape. `numCandidates` is search-time
+only and takes effect immediately.
+
+Via the application config (vault, library, and directory profiles — the
+server profile uses Meilisearch, so these have no effect there):
+
+```bash
+export TANSEKI_LUCENE_VECTOR_DIMENSIONS=384
+export TANSEKI_LUCENE_VECTOR_MAX_CONN=32
+export TANSEKI_LUCENE_VECTOR_BEAM_WIDTH=200
+export TANSEKI_LUCENE_VECTOR_NUM_CANDIDATES=50
+```
+
+Unset means the shipped default above. Non-numeric or out-of-range values
+fail fast at startup.
 
 Reproduce:
 

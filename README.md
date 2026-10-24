@@ -186,6 +186,10 @@ the path, profile, and index directory for their supported operations.
 | `TANSEKI_MEILI_KEY` | Meilisearch API key | unset |
 | `TANSEKI_EMBEDDING_DIR` | Directory containing an available ONNX embedding model | unset; lexical lookup |
 | `TANSEKI_EMBEDDING_MODEL` | Embedding model configuration identifier | adapter default |
+| `TANSEKI_LUCENE_VECTOR_DIMENSIONS` | Expected vector length; unset accepts the embedder's dims | unset |
+| `TANSEKI_LUCENE_VECTOR_MAX_CONN` | HNSW graph fanout (index-time; needs `rebuild`) | `16` (measured best trade-off) |
+| `TANSEKI_LUCENE_VECTOR_BEAM_WIDTH` | HNSW build beam (index-time; needs `rebuild`) | `100` (measured best trade-off) |
+| `TANSEKI_LUCENE_VECTOR_NUM_CANDIDATES` | Search-time overfetch; unset fetches exactly `limit` | unset |
 
 Never commit API keys, database passwords, model directories containing private
 artifacts, or runtime vault state.

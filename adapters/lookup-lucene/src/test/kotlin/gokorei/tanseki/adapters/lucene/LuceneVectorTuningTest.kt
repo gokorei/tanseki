@@ -29,13 +29,16 @@ class LuceneVectorTuningTest {
         )
 
     @Test
-    fun `defaults match the Lucene HNSW out-of-the-box shape`() {
+    fun `shipped default is the tuned preset`() {
         val config = LuceneVectorConfig()
 
+        assertEquals(LuceneVectorConfig.SHIPPED_MAX_CONN, config.maxConn)
+        assertEquals(LuceneVectorConfig.SHIPPED_BEAM_WIDTH, config.beamWidth)
         assertEquals(16, config.maxConn)
         assertEquals(100, config.beamWidth)
         assertEquals(null, config.dimensions)
         assertEquals(null, config.numCandidates)
+        assertEquals(config, LuceneVectorConfig.DEFAULT)
     }
 
     @Test
