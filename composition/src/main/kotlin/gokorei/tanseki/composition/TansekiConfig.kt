@@ -1,5 +1,6 @@
 package gokorei.tanseki.composition
 
+import gokorei.tanseki.adapters.lucene.LuceneVectorConfig
 import gokorei.tanseki.core.domain.VaultDirs
 import gokorei.tanseki.core.ports.LogLevel
 import java.nio.file.Path
@@ -28,6 +29,16 @@ data class TansekiConfig(
     val meiliApiKey: String? = null,
     val embeddingDir: Path? = null,
     val embeddingModel: String? = null,
+    /**
+     * Lucene HNSW vector knobs for the profiles backed by LuceneLookup
+     * (vault, library, directory). Defaults are the shipped tuned preset
+     * (see `LuceneVectorConfig`). The server profile uses Meilisearch, so
+     * these values are accepted but have no effect there.
+     */
+    val luceneVectorDimensions: Int? = null,
+    val luceneVectorMaxConn: Int = LuceneVectorConfig.SHIPPED_MAX_CONN,
+    val luceneVectorBeamWidth: Int = LuceneVectorConfig.SHIPPED_BEAM_WIDTH,
+    val luceneVectorNumCandidates: Int? = null,
     val httpHost: String = "127.0.0.1",
     val httpPort: Int = 8088,
     val apiTlsMode: ApiTlsMode = ApiTlsMode.NONE,
@@ -40,6 +51,21 @@ data class TansekiConfig(
      */
     val corsAllowOrigins: String? = null
 ) {
+    init {
+        // Fail fast on out-of-range HNSW knobs whether they came from the
+        // environment or a direct constructor call.
+        luceneVectorConfig()
+    }
+
+    /** Builds the [LuceneVectorConfig] backing the Lucene-backed profiles. */
+    fun luceneVectorConfig(): LuceneVectorConfig =
+        LuceneVectorConfig(
+            dimensions = luceneVectorDimensions,
+            maxConn = luceneVectorMaxConn,
+            beamWidth = luceneVectorBeamWidth,
+            numCandidates = luceneVectorNumCandidates
+        )
+
     companion object {
         const val ENV_PROFILE = "TANSEKI_PROFILE"
         const val ENV_PATH = "TANSEKI_PATH"
@@ -55,6 +81,10 @@ data class TansekiConfig(
         const val ENV_MEILI_KEY = "TANSEKI_MEILI_KEY"
         const val ENV_EMBEDDING_DIR = "TANSEKI_EMBEDDING_DIR"
         const val ENV_EMBEDDING_MODEL = "TANSEKI_EMBEDDING_MODEL"
+        const val ENV_LUCENE_VECTOR_DIMENSIONS = "TANSEKI_LUCENE_VECTOR_DIMENSIONS"
+        const val ENV_LUCENE_VECTOR_MAX_CONN = "TANSEKI_LUCENE_VECTOR_MAX_CONN"
+        const val ENV_LUCENE_VECTOR_BEAM_WIDTH = "TANSEKI_LUCENE_VECTOR_BEAM_WIDTH"
+        const val ENV_LUCENE_VECTOR_NUM_CANDIDATES = "TANSEKI_LUCENE_VECTOR_NUM_CANDIDATES"
         const val ENV_HTTP_HOST = "TANSEKI_HTTP_HOST"
         const val ENV_HTTP_PORT = "TANSEKI_HTTP_PORT"
         const val ENV_TLS_MODE = "TANSEKI_TLS_MODE"
@@ -98,6 +128,14 @@ data class TansekiConfig(
                 meiliApiKey = read(env, ENV_MEILI_KEY),
                 embeddingDir = read(env, ENV_EMBEDDING_DIR)?.let(Path::of),
                 embeddingModel = read(env, ENV_EMBEDDING_MODEL),
+                luceneVectorDimensions = intFromEnv(env, ENV_LUCENE_VECTOR_DIMENSIONS),
+                luceneVectorMaxConn =
+                    intFromEnv(env, ENV_LUCENE_VECTOR_MAX_CONN)
+                        ?: LuceneVectorConfig.SHIPPED_MAX_CONN,
+                luceneVectorBeamWidth =
+                    intFromEnv(env, ENV_LUCENE_VECTOR_BEAM_WIDTH)
+                        ?: LuceneVectorConfig.SHIPPED_BEAM_WIDTH,
+                luceneVectorNumCandidates = intFromEnv(env, ENV_LUCENE_VECTOR_NUM_CANDIDATES),
                 httpHost = read(env, ENV_HTTP_HOST)?.trim()?.takeIf(String::isNotEmpty) ?: "127.0.0.1",
                 httpPort =
                     read(env, ENV_HTTP_PORT)?.let { value ->
@@ -109,6 +147,11 @@ data class TansekiConfig(
                 apiCredentials = read(env, ENV_API_CREDENTIALS)?.trim()?.takeIf(String::isNotEmpty),
                 corsAllowOrigins = read(env, ENV_CORS_ALLOW_ORIGINS)?.trim()?.takeIf(String::isNotEmpty)
             )
+        }
+
+        private fun intFromEnv(env: Map<String, String>, name: String): Int? {
+            val raw = read(env, name)?.trim()?.takeIf(String::isNotEmpty) ?: return null
+            return raw.toIntOrNull() ?: throw IllegalArgumentException("invalid $name '$raw'")
         }
 
         private fun tlsModeFromEnv(env: Map<String, String>): ApiTlsMode {

@@ -2,6 +2,8 @@ package gokorei.tanseki.composition
 
 import gokorei.tanseki.adapters.context.sqlite.SqliteContextStore
 import gokorei.tanseki.adapters.file.FileContextStore
+import gokorei.tanseki.adapters.lucene.LuceneLookup
+import gokorei.tanseki.adapters.lucene.LuceneVectorConfig
 import gokorei.tanseki.adapters.plain.PlainDirectoryStore
 import gokorei.tanseki.core.domain.Collection
 import gokorei.tanseki.core.domain.Consistency
@@ -291,6 +293,83 @@ class CompositionProfilesTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_TRUST_PROXY to "sometimes"))
+        }
+    }
+
+    @Test
+    fun `lucene vector knobs default to the shipped tuned preset`() {
+        val config = TansekiConfig.fromEnv(emptyMap())
+
+        assertNull(config.luceneVectorDimensions)
+        assertEquals(LuceneVectorConfig.SHIPPED_MAX_CONN, config.luceneVectorMaxConn)
+        assertEquals(LuceneVectorConfig.SHIPPED_BEAM_WIDTH, config.luceneVectorBeamWidth)
+        assertNull(config.luceneVectorNumCandidates)
+        assertEquals(LuceneVectorConfig.DEFAULT, config.luceneVectorConfig())
+    }
+
+    @Test
+    fun `lucene vector knobs load from the environment`() {
+        val config =
+            TansekiConfig.fromEnv(
+                mapOf(
+                    TansekiConfig.ENV_LUCENE_VECTOR_DIMENSIONS to "16",
+                    TansekiConfig.ENV_LUCENE_VECTOR_MAX_CONN to "32",
+                    TansekiConfig.ENV_LUCENE_VECTOR_BEAM_WIDTH to "200",
+                    TansekiConfig.ENV_LUCENE_VECTOR_NUM_CANDIDATES to "50"
+                )
+            )
+
+        assertEquals(
+            LuceneVectorConfig(dimensions = 16, maxConn = 32, beamWidth = 200, numCandidates = 50),
+            config.luceneVectorConfig()
+        )
+    }
+
+    @Test
+    fun `invalid lucene vector values fail closed`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_LUCENE_VECTOR_MAX_CONN to "not-a-number"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_LUCENE_VECTOR_MAX_CONN to "1"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_LUCENE_VECTOR_BEAM_WIDTH to "3201"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TansekiConfig.fromEnv(mapOf(TansekiConfig.ENV_LUCENE_VECTOR_DIMENSIONS to "0"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TansekiConfig(
+                profile = Profile.LIBRARY,
+                path = tmp,
+                indexDir = tmp.resolve("index"),
+                logLevel = LogLevel.INFO,
+                luceneVectorMaxConn = 1
+            )
+        }
+    }
+
+    @Test
+    fun `non-default vector config reaches the lucene lookup`() {
+        val db = tmp.resolve("vectors.db")
+        val config =
+            TansekiConfig(
+                profile = Profile.LIBRARY,
+                path = db,
+                indexDir = tmp.resolve("index"),
+                logLevel = LogLevel.INFO,
+                luceneVectorMaxConn = 32,
+                luceneVectorBeamWidth = 200,
+                luceneVectorNumCandidates = 50
+            )
+
+        Compositions.open(config).use { composition ->
+            val lookup = composition.lookup as LuceneLookup
+            assertEquals(
+                LuceneVectorConfig(maxConn = 32, beamWidth = 200, numCandidates = 50),
+                lookup.vectorConfig
+            )
         }
     }
 

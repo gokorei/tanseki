@@ -9,6 +9,15 @@ import org.apache.lucene.index.VectorSimilarityFunction
 /**
  * kNN vector index tuning for [LuceneLookup].
  *
+ * The shipped default is the measured best-trade-off preset (the "default"
+ * row of the recall table in this module's README: maxConn 16, beamWidth 100,
+ * no dimension pin, no overfetch — recall@10 0.995 at 1.149 ms/query on the
+ * 1000-doc benchmark). It gains ~12 recall points over the lean shape for less
+ * index time, while the rich shape buys only +0.005 recall for ~2.2x query
+ * latency. The shipped values are pinned as literals so a Lucene upgrade
+ * cannot silently retune the index; the codec's own out-of-the-box constants
+ * are only used for the read-only no-arg codec instance.
+ *
  * The HNSW graph is built at index time with [maxConn] (M: graph fanout) and
  * [beamWidth] (efConstruction: candidate beam while building). Both only take
  * effect on newly written segments, so retuning an existing on-disk index
@@ -25,8 +34,8 @@ import org.apache.lucene.index.VectorSimilarityFunction
  */
 data class LuceneVectorConfig(
     val dimensions: Int? = null,
-    val maxConn: Int = DEFAULT_MAX_CONN,
-    val beamWidth: Int = DEFAULT_BEAM_WIDTH,
+    val maxConn: Int = SHIPPED_MAX_CONN,
+    val beamWidth: Int = SHIPPED_BEAM_WIDTH,
     val numCandidates: Int? = null,
     val similarity: VectorSimilarityFunction = VectorSimilarityFunction.COSINE
 ) {
@@ -52,8 +61,18 @@ data class LuceneVectorConfig(
     }
 
     companion object {
-        const val DEFAULT_MAX_CONN = Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN
-        const val DEFAULT_BEAM_WIDTH = Lucene99HnswVectorsFormat.DEFAULT_BEAM_WIDTH
+        /**
+         * Shipped HNSW shape: the measured best-trade-off preset (recall@10
+         * 0.995 at 1.149 ms/query). Pinned as literals, not aliased to the
+         * codec's out-of-the-box constants, so the default cannot drift with a
+         * Lucene upgrade. They currently coincide with the codec defaults.
+         */
+        const val SHIPPED_MAX_CONN = 16
+        const val SHIPPED_BEAM_WIDTH = 100
+
+        /** The shipped default preset as an instance. */
+        val DEFAULT = LuceneVectorConfig()
+
         const val MAXIMUM_MAX_CONN = Lucene99HnswVectorsFormat.MAXIMUM_MAX_CONN
         const val MAXIMUM_BEAM_WIDTH = Lucene99HnswVectorsFormat.MAXIMUM_BEAM_WIDTH
         const val MIN_MAX_CONN = 2

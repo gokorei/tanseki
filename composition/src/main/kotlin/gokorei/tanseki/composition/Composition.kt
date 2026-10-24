@@ -7,6 +7,7 @@ import gokorei.tanseki.adapters.embedder.EmbeddingModels
 import gokorei.tanseki.adapters.embedder.OnnxEmbedders
 import gokorei.tanseki.adapters.file.FileContextStore
 import gokorei.tanseki.adapters.lucene.LuceneLookup
+import gokorei.tanseki.adapters.lucene.LuceneVectorConfig
 import gokorei.tanseki.adapters.meili.MeiliLookup
 import gokorei.tanseki.adapters.pijul.PijulCliClient
 import gokorei.tanseki.adapters.plain.PlainDirectoryStore
@@ -69,8 +70,21 @@ object Compositions {
         if (config.profile == Profile.SERVER) requireServerConfig(config)
         val embedder = openEmbedder(config)
         return when (config.profile) {
-            Profile.SERVER -> openServer(config, embedder, logger)
-            else -> openLocal(config.path, config.profile, config.indexDir, config.pijulBinary, embedder, logger)
+            Profile.SERVER -> {
+                openServer(config, embedder, logger)
+            }
+
+            else -> {
+                openLocal(
+                    config.path,
+                    config.profile,
+                    config.indexDir,
+                    config.pijulBinary,
+                    embedder,
+                    logger,
+                    config.luceneVectorConfig()
+                )
+            }
         }
     }
 
@@ -80,7 +94,8 @@ object Compositions {
         indexDir: Path,
         pijulBinary: String = "pijul",
         embedder: Embedder? = null,
-        logger: TansekiLogger = TansekiLogger.Noop
+        logger: TansekiLogger = TansekiLogger.Noop,
+        vectorConfig: LuceneVectorConfig = LuceneVectorConfig()
     ): Composition =
         when (mode) {
             Profile.VAULT -> {
@@ -90,7 +105,7 @@ object Compositions {
                         pijul = PijulCliClient(binary = pijulBinary, logger = logger),
                         clock = systemClock
                     )
-                Composition(mode, store, LuceneLookup.open(indexDir, logger), embedder)
+                Composition(mode, store, LuceneLookup.open(indexDir, logger, vectorConfig), embedder)
             }
 
             Profile.LIBRARY -> {
@@ -104,7 +119,7 @@ object Compositions {
                 Composition(
                     profile = mode,
                     store = SqliteContextStore(driver, systemClock),
-                    lookup = LuceneLookup.open(indexDir, logger),
+                    lookup = LuceneLookup.open(indexDir, logger, vectorConfig),
                     embedder = embedder,
                     onClose = { driver.close() }
                 )
@@ -117,7 +132,12 @@ object Compositions {
             }
 
             Profile.DIRECTORY -> {
-                Composition(mode, PlainDirectoryStore(path), LuceneLookup.open(indexDir, logger), embedder)
+                Composition(
+                    mode,
+                    PlainDirectoryStore(path),
+                    LuceneLookup.open(indexDir, logger, vectorConfig),
+                    embedder
+                )
             }
         }
 
