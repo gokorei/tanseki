@@ -531,6 +531,58 @@ class LuceneLookupTest {
     }
 
     @Test
+    fun `a plain-text attachment is searchable by its words`() {
+        LuceneLookup().use { lookup ->
+            lookup.index(doc("notes/txt", "cabinet minutes archived").copy(path = "assets/minutes.txt"), emptyList())
+            lookup.index(doc("notes/other", "unrelated body"), emptyList())
+
+            val hits = lookup.searchText("cabinet", Filters(), 10)
+
+            assertEquals(listOf(DocId("notes/txt")), hits.map { it.id })
+            assertTrue(hits.single().snippet!!.contains("cabinet"))
+        }
+    }
+
+    @Test
+    fun `a binary attachment keeps its id but contributes no full text`() {
+        LuceneLookup().use { lookup ->
+            lookup.index(
+                doc("assets/photo", "binary-noise-unique-token", extra = mapOf("kind" to "photo"))
+                    .copy(path = "assets/photo.png"),
+                emptyList()
+            )
+
+            assertTrue(
+                lookup.searchText("binary-noise-unique-token", Filters(), 10).isEmpty(),
+                "binary bytes must not be filed under searchable terms"
+            )
+            assertEquals(setOf(DocId("assets/photo")), lookup.indexedIds())
+            assertEquals(
+                listOf(DocId("assets/photo")),
+                lookup
+                    .searchText("", Filters.fromStrings(frontmatter = mapOf("kind" to "photo")), 10)
+                    .map { it.id }
+            )
+        }
+    }
+
+    @Test
+    fun `a canvas is searchable by its node text rather than its json syntax`() {
+        LuceneLookup().use { lookup ->
+            val payload =
+                """{"nodes":[{"id":"a","type":"text","text":"kickoff decisions recorded here"},""" +
+                    """{"id":"b","type":"file","file":"assets/photo.png"}],"edges":[]}"""
+            lookup.index(doc("board", payload).copy(path = "board.canvas"), emptyList())
+
+            assertEquals(listOf(DocId("board")), lookup.searchText("kickoff", Filters(), 10).map { it.id })
+            assertTrue(
+                lookup.searchText("nodes", Filters(), 10).isEmpty(),
+                "json keys are not node text and must not match"
+            )
+        }
+    }
+
+    @Test
     fun `remove drops the document from all searches`() {
         LuceneLookup().use { lookup ->
             lookup.index(doc("a", "unique-token"), emptyList())

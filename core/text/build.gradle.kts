@@ -10,4 +10,8 @@ dependencies {
     // has to be schema-less. Frontmatter is untrusted input (vault import, the
     // HTTP seam), so FrontmatterCodec drives it through the safe loader.
     api(libs.snakeyaml.engine)
+    // Canvas payloads are JSON. Only the tree API is used (no @Serializable
+    // models), so no compiler plugin is needed: the node walk below reads
+    // untrusted vault bytes and must tolerate shapes a model would refuse.
+    implementation(libs.kotlinx.serialization.json)
 }

@@ -1,5 +1,10 @@
 package gokorei.tanseki.core.text
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -92,6 +97,82 @@ object ObsidianParity {
     fun mediaTypeForExtension(extension: String): String? = MEDIA_TYPES[extension.lowercase()]
 
     /**
+     * Attachment extensions whose bytes are plain text the Lookup can index.
+     *
+     * Deliberately narrow: only formats readable without a vendored decoder.
+     * `txt` and `csv` are text by definition, `json` is the format vault
+     * sidecars already use, and `svg` is XML text (indexed raw, markup
+     * included — stripping tags would be a renderer, not a classifier).
+     * Everything else a vault holds — images, audio, video, PDFs, archives —
+     * needs a decoder Tanseki does not ship, so it is skipped rather than
+     * indexed as noise. See [indexableContent].
+     */
+    val SEARCHABLE_ATTACHMENT_EXTENSIONS: Set<String> = setOf("txt", "csv", "json", "svg")
+
+    /**
+     * True when [path] names an attachment whose bytes are plain text.
+     *
+     * Markdown and canvas paths are never attachments, whatever their bytes —
+     * they have their own indexing rules — so this is false for them.
+     */
+    fun isSearchableAttachment(path: String): Boolean {
+        if (kindForPath(path) != DocumentKind.ATTACHMENT) return false
+        val extension = path.trim().substringAfterLast('.', "")
+        return extension.isNotEmpty() && extension.lowercase() in SEARCHABLE_ATTACHMENT_EXTENSIONS
+    }
+
+    /**
+     * The text the Lookup should index for a vault file, or `null` when there
+     * is deliberately nothing to index.
+     *
+     * - markdown: [content] unchanged — it is already text;
+     * - canvas: the node text [canvasSearchText] extracts;
+     * - a searchable attachment ([isSearchableAttachment]): [content] unchanged;
+     * - anything else: `null`. A PNG or MP3 has no text without a decoder, and
+     *   indexing its bytes would file binary noise under searchable terms.
+     *   The document is still indexed (id, path, frontmatter survive) — only
+     *   its full text is absent, which is what makes the skip list a recall
+     *   boundary rather than a hole in the index.
+     */
+    fun indexableContent(path: String, content: String): String? =
+        when (kindForPath(path)) {
+            DocumentKind.MARKDOWN -> content
+            DocumentKind.CANVAS -> canvasSearchText(content)
+            DocumentKind.ATTACHMENT -> if (isSearchableAttachment(path)) content else null
+        }
+
+    /**
+     * The searchable text of a `.canvas` payload: the `text` of every text
+     * node, in document order, joined by blank lines.
+     *
+     * Only text nodes contribute. A `file` or `link` node names a reference —
+     * that is a graph concern (edge derivation), not full text — and a canvas
+     * edge connects two cards inside the board, not two vault documents, so
+     * neither is surfaced here. A payload that is not a canvas object yields
+     * [fallback] unchanged: an unreadable board must stay findable by its raw
+     * bytes rather than vanish from the index.
+     */
+    fun canvasSearchText(fallback: String): String {
+        val texts = mutableListOf<String>()
+        val parsed =
+            runCatching {
+                val root = CANVAS_JSON.parseToJsonElement(fallback).jsonObject
+                val nodes = root["nodes"]?.jsonArray ?: return@runCatching null
+                nodes.forEach { node ->
+                    // One odd card must not sink the board: a non-object node,
+                    // a missing type, or a non-string text is skipped, not fatal.
+                    val card = node as? JsonObject ?: return@forEach
+                    val type = card["type"] as? JsonPrimitive ?: return@forEach
+                    if (!type.isString || type.content != "text") return@forEach
+                    val text = card["text"] as? JsonPrimitive ?: return@forEach
+                    if (text.isString) texts += text.content
+                }
+                true
+            }.getOrNull()
+        return if (parsed == null) fallback else texts.joinToString("\n\n")
+    }
+
+    /**
      * Preview hints for the attachment kinds a vault commonly holds.
      *
      * A map rather than a branch: same answers, no complexity budget spent.
@@ -113,6 +194,14 @@ object ObsidianParity {
             "csv" to "text/csv",
             "json" to "application/json"
         )
+
+    /**
+     * Lenient JSON reader for canvas payloads: unknown keys are ignored, and a
+     * text node missing its `text` is a card without words, not a corrupt
+     * board. Vault bytes are foreign input, so strictness here would turn one
+     * plugin's extra field into an unsearchable canvas.
+     */
+    private val CANVAS_JSON = Json { ignoreUnknownKeys = true }
 
     /**
      * The vault path for [date]'s daily note.
