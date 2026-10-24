@@ -131,6 +131,65 @@ class ObsidianParityTest {
     }
 
     @Test
+    fun `plain-text attachments are searchable whatever the case of the suffix`() {
+        assertTrue(ObsidianParity.isSearchableAttachment("notes/export.txt"))
+        assertTrue(ObsidianParity.isSearchableAttachment("data/table.CSV"))
+        assertTrue(ObsidianParity.isSearchableAttachment("sidecar/meta.JSON"))
+        assertTrue(ObsidianParity.isSearchableAttachment("assets/logo.svg"))
+    }
+
+    @Test
+    fun `binary attachments are skipped and notes are never attachments`() {
+        listOf("assets/photo.png", "clip.mp3", "film.mp4", "paper.pdf", "archive.tar.gz", "font.woff2").forEach {
+            assertFalse(ObsidianParity.isSearchableAttachment(it), "$it must be skipped")
+        }
+        assertFalse(ObsidianParity.isSearchableAttachment("notes/foo.md"))
+        assertFalse(ObsidianParity.isSearchableAttachment("board.canvas"))
+        assertFalse(ObsidianParity.isSearchableAttachment(".gitignore"))
+        assertFalse(ObsidianParity.isSearchableAttachment("draft."))
+    }
+
+    @Test
+    fun `indexable content keeps markdown and plain-text attachments verbatim`() {
+        assertEquals("body", ObsidianParity.indexableContent("notes/foo.md", "body"))
+        assertEquals("a,b", ObsidianParity.indexableContent("data/table.csv", "a,b"))
+        assertEquals("{}", ObsidianParity.indexableContent("sidecar/meta.json", "{}"))
+    }
+
+    @Test
+    fun `indexable content skips binary attachments but keeps the document`() {
+        assertNull(ObsidianParity.indexableContent("assets/photo.png", "not-really-text"))
+        assertNull(ObsidianParity.indexableContent("clip.mp3", "not-really-text"))
+        assertNull(ObsidianParity.indexableContent("paper.pdf", "not-really-text"))
+    }
+
+    @Test
+    fun `a canvas surfaces its text nodes in order and nothing else`() {
+        val payload =
+            """
+            {"nodes":[
+              {"id":"a","type":"text","text":"Board kickoff notes"},
+              {"id":"b","type":"file","file":"assets/photo.png"},
+              {"id":"c","type":"link","url":"https://example.com"},
+              {"id":"d","type":"text","text":"Second card"}
+            ],"edges":[{"id":"e","fromNode":"a","toNode":"d"}]}
+            """.trimIndent()
+
+        assertEquals("Board kickoff notes\n\nSecond card", ObsidianParity.canvasSearchText(payload))
+        assertEquals("Board kickoff notes\n\nSecond card", ObsidianParity.indexableContent("board.canvas", payload))
+    }
+
+    @Test
+    fun `a canvas without text nodes indexes as nothing and a broken one as raw bytes`() {
+        val imageless = """{"nodes":[{"id":"b","type":"file","file":"assets/photo.png"}],"edges":[]}"""
+        assertEquals("", ObsidianParity.canvasSearchText(imageless))
+
+        val broken = "not json at all"
+        assertEquals(broken, ObsidianParity.canvasSearchText(broken))
+        assertEquals(broken, ObsidianParity.indexableContent("board.canvas", broken))
+    }
+
+    @Test
     fun `a daily note path is the ISO day with markdown suffix`() {
         val day = LocalDate.of(2026, 10, 8)
 

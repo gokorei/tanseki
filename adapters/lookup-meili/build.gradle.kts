@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation(project(":core:ports"))
+    implementation(project(":core:text"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)

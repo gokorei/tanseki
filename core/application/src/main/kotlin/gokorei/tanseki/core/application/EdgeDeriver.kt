@@ -13,7 +13,8 @@ import gokorei.tanseki.core.text.MarkdownParser
  * Derives typed edges from a document and reconciles them into the ContextStore.
  *
  * Sources:
- *  - `[[wikilinks]]` → `links-to` edges (only when the target resolves);
+ *  - `[[wikilinks]]` → `links-to` edges (only when the target resolves), and
+ *    `![[embeds]]` additionally → `embeds` edges through the same resolution;
  *  - frontmatter refs → typed edges: `repo`/`pr`/`jira` → `references`,
  *    `author` → `mentions`, `files` → `embeds`.
  *
@@ -40,6 +41,14 @@ class EdgeDeriver(
             resolve(link.target)?.let { target ->
                 val props = link.label?.let { mapOf("label" to it) } ?: emptyMap()
                 edges += Edge(doc.id, target, RelTypes.LinksTo, props)
+                // An embed names the same document a link would — the `!`
+                // only says "render it here" — so it resolves through the same
+                // path and additionally carries the `embeds` edge. Without it
+                // traversing `embeds` misses every body transclusion while
+                // `links-to` finds it, which reads as "this note embeds
+                // nothing" for a note that visibly does. A dangling embed
+                // derives nothing, exactly like a dangling link.
+                if (link.embed) edges += Edge(doc.id, target, RelTypes.Embeds)
             }
         }
 

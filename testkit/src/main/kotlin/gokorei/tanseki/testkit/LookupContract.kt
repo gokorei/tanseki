@@ -108,6 +108,16 @@ abstract class LookupContract {
 
     @Test
     @Suppress("FunctionNaming")
+    fun `traverse follows embeds edges like links-to edges`() {
+        lookup.index(document("a", "a"), listOf(Edge(DocId("a"), DocId("b"), RelTypes.Embeds)))
+        lookup.index(document("b", "b"), emptyList())
+
+        assertEquals(listOf(DocId("b")), lookup.traverse(DocId("a"), RelTypes.Embeds, 1))
+        assertTrue(lookup.traverse(DocId("a"), RelTypes.LinksTo, 1).isEmpty())
+    }
+
+    @Test
+    @Suppress("FunctionNaming")
     fun `remove drops the document`() {
         lookup.index(document("a", "uniquetoken"), emptyList())
         assertEquals(setOf(DocId("a")), lookup.indexedIds())

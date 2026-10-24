@@ -16,6 +16,7 @@ import gokorei.tanseki.core.ports.Lookup
 import gokorei.tanseki.core.ports.RetryPolicy
 import gokorei.tanseki.core.ports.TansekiLogger
 import gokorei.tanseki.core.ports.retry
+import gokorei.tanseki.core.text.ObsidianParity
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.network.sockets.ConnectTimeoutException
@@ -596,7 +597,11 @@ class MeiliLookup private constructor(
             put("docId", doc.id.value)
             put("collection", doc.collection.value)
             put("path", doc.path)
-            put("content", doc.content)
+            // The same indexable form Lucene files: canvas node text, plain-text
+            // attachments verbatim, binary attachments as nothing. The two
+            // adapters must answer the same query with the same documents, so
+            // the policy lives in `core:text` and both call it.
+            put("content", ObsidianParity.indexableContent(doc.path, doc.content) ?: "")
             put("contentHash", doc.contentHash)
             put("revision", doc.revision.value)
             doc.frontmatter.title?.let { put("title", it) }

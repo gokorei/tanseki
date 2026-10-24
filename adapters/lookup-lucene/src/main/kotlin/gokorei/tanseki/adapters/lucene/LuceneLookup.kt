@@ -10,6 +10,7 @@ import gokorei.tanseki.core.ports.Hit
 import gokorei.tanseki.core.ports.Lookup
 import gokorei.tanseki.core.ports.TansekiLogger
 import gokorei.tanseki.core.ports.VectorWriter
+import gokorei.tanseki.core.text.ObsidianParity
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute
@@ -111,6 +112,13 @@ class LuceneLookup(
     /**
      * Writes one document and its edges without committing, so rebuild and other
      * batch paths can commit once instead of once per document.
+     *
+     * The indexed full text is the vault file's indexable form
+     * ([ObsidianParity.indexableContent]), not its raw bytes: a canvas board
+     * files its node text, a `.txt` attachment its plain text, and a binary
+     * attachment nothing at all. The id, path, and frontmatter still index —
+     * only the full text is skipped — so a binary document stays addressable
+     * without filing undecodable bytes under searchable terms.
      */
     private fun indexWithoutCommit(doc: Document, edges: List<Edge>) {
         deleteOwned(doc.id)
@@ -120,7 +128,13 @@ class LuceneLookup(
         node.add(StringField(FIELD_COLLECTION, doc.collection.value, Field.Store.YES))
         node.add(StringField(FIELD_PATH, doc.path, Field.Store.YES))
         node.add(StringField(FIELD_CONTENT_HASH, doc.contentHash, Field.Store.YES))
-        node.add(TextField(FIELD_CONTENT, doc.content, Field.Store.YES))
+        node.add(
+            TextField(
+                FIELD_CONTENT,
+                ObsidianParity.indexableContent(doc.path, doc.content) ?: "",
+                Field.Store.YES
+            )
+        )
         doc.frontmatter.title?.let { node.add(TextField(FIELD_TITLE, it, Field.Store.YES)) }
         doc.frontmatter.tags.forEach { node.add(StringField(FIELD_TAGS, it, Field.Store.YES)) }
         indexFrontmatter(node, doc)

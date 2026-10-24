@@ -62,11 +62,36 @@ classifies the target and hints a media type for common extensions; it never
 inspects the bytes, and an unlisted extension yields no hint rather than a
 guess.
 
+Attachments never become documents on import — the importer only admits
+`*.md` — but a document with an attachment path still indexes, and its full
+text follows the indexable-content rule (`ObsidianParity.indexableContent`,
+which both Lookup adapters call):
+
+- markdown indexes verbatim;
+- a canvas indexes its node text (see below);
+- a plain-text attachment (`txt`, `csv`, `json`, `svg` — the
+  `SEARCHABLE_ATTACHMENT_EXTENSIONS` set, matched case-insensitively) indexes
+  verbatim. `svg` is indexed raw, markup included: stripping tags would be a
+  renderer, not a classifier;
+- anything else indexes as no full text. Images, audio, video, PDFs, and
+  archives need a decoder Tanseki does not ship, so their bytes are skipped
+  rather than filed under searchable terms. This is a recall boundary, not a
+  hole: the document keeps its id, path, and frontmatter in the index, so it
+  stays addressable and filterable — only its full text is absent.
+
 ## Canvases
 
 A path ending in `.canvas` (any case) is a canvas document — Obsidian's JSON
 whiteboard format — not a note and not an attachment. The text layer recognises
-the kind by suffix; the JSON payload is opaque to it.
+the kind by suffix and surfaces the board's words: `canvasSearchText` files the
+`text` of every text node, in document order.
+
+Only text nodes contribute. A `file` or `link` node names a reference — that is
+a graph concern (edge derivation), not full text — and a canvas edge connects
+two cards inside the board, not two vault documents, so neither is surfaced.
+A payload that is not a canvas object (not JSON, or JSON without a `nodes`
+array) indexes as its raw bytes: an unreadable board stays findable rather
+than vanishing from the index.
 
 ## Daily notes and templates
 
@@ -95,9 +120,9 @@ enum on `TraverseRequest`/`BacklinksRequest`:
 
 | `rel`        | derives from                              | target                          |
 |--------------|-------------------------------------------|---------------------------------|
-| `links-to`   | `[[wikilink]]` in the body                | a document, only when it resolves |
+| `links-to`   | `[[wikilink]]` in the body (embeds included — `![[x]]` keeps its `links-to` edge) | a document, only when it resolves |
 | `references` | frontmatter `repo`, `pr`, `jira`         | a document, only when it resolves (see below) |
-| `embeds`     | frontmatter `files`                       | a document, only when it resolves |
+| `embeds`     | frontmatter `files`, plus body `![[embed]]` through the same resolution as links | a document, only when it resolves |
 | `mentions`   | frontmatter `author`                      | a synthetic `author/<name>` id  |
 
 Frontmatter **keys** (`files`, `repo`, `pr`, `jira`, `author`) are not

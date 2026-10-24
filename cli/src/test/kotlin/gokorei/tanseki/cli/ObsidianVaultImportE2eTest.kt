@@ -241,8 +241,12 @@ class ObsidianVaultImportE2eTest {
         val library = importVault()
 
         Compositions.openLocal(library, Profile.LIBRARY, tmp.resolve("check.index")).use { composition ->
+            // One edge per distinct (rel, target) per document: Index's
+            // ![[Reference]] carries both its links-to edge and its embeds
+            // edge, so the total counts the transclusion twice — once per
+            // relationship — rather than once per target.
             val total = expectedIds.values.sumOf { composition.store.neighbors(DocId(it)).size }
-            assertEquals(16, total, "one edge per distinct resolved target per document")
+            assertEquals(17, total, "one edge per distinct resolved target per document")
             assertEquals(
                 setOf(
                     "notes/Project Alpha",
