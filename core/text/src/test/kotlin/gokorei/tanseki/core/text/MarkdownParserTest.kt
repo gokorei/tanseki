@@ -267,7 +267,7 @@ class MarkdownParserTest {
                     )
             )
 
-        val serialized = FrontmatterCodec.serialize(frontmatter)
+        val serialized = FrontmatterSerializer.serialize(frontmatter)
         val reparsed = FrontmatterCodec.parse(serialized)
 
         assertEquals(frontmatter, reparsed)
@@ -282,13 +282,13 @@ class MarkdownParserTest {
         val controls = listOf("\u0000", "\u0001", "\u007f", "\u0085")
         controls.forEach { control ->
             assertThrows(IllegalArgumentException::class.java) {
-                FrontmatterCodec.serialize(Frontmatter(title = control))
+                FrontmatterSerializer.serialize(Frontmatter(title = control))
             }
             assertThrows(IllegalArgumentException::class.java) {
-                FrontmatterCodec.serialize(Frontmatter(values = mapOf("key" to TextValue(control))))
+                FrontmatterSerializer.serialize(Frontmatter(values = mapOf("key" to TextValue(control))))
             }
             assertThrows(IllegalArgumentException::class.java) {
-                FrontmatterCodec.serialize(Frontmatter(values = mapOf(control to TextValue("value"))))
+                FrontmatterSerializer.serialize(Frontmatter(values = mapOf(control to TextValue("value"))))
             }
             assertThrows(IllegalArgumentException::class.java) {
                 FrontmatterCodec.parse("title: \"${control}\"")
@@ -308,7 +308,7 @@ class MarkdownParserTest {
                     )
             )
 
-        val serialized = FrontmatterCodec.serialize(frontmatter)
+        val serialized = FrontmatterSerializer.serialize(frontmatter)
         val reparsed = FrontmatterCodec.parse(serialized)
 
         assertEquals(frontmatter, reparsed)

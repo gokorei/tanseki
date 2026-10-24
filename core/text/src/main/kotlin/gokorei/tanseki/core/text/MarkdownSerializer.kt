@@ -12,7 +12,7 @@ object MarkdownSerializer {
         // every YAML shape — inline lists, non-alphabetical key order, quoting
         // style — so re-serializing it would rewrite properties on every save
         // even when nothing semantically changed.
-        val block = frontmatter.rawFrontmatter ?: FrontmatterCodec.serialize(frontmatter)
+        val block = frontmatter.rawFrontmatter ?: FrontmatterSerializer.serialize(frontmatter)
         if (block.isBlank()) return body
         // Normalise the trailing newline explicitly. `serialize` happens to end
         // with one, but a verbatim block captured by `splitFrontmatter` does

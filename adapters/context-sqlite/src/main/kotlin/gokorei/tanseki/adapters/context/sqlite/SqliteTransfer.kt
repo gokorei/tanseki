@@ -9,7 +9,7 @@ import gokorei.tanseki.core.ports.Clock
 import gokorei.tanseki.core.ports.TransferState
 import gokorei.tanseki.core.ports.importDocument
 import gokorei.tanseki.core.ports.isStaleTransfer
-import gokorei.tanseki.core.text.FrontmatterCodec
+import gokorei.tanseki.core.text.FrontmatterSerializer
 
 /**
  * History and document transfer: reconciliation `importTransferState` and the
@@ -64,7 +64,7 @@ internal class SqliteTransfer(
                     id = document.id.value,
                     collection = document.collection.value,
                     path = document.path,
-                    frontmatter = FrontmatterCodec.serialize(document.frontmatter),
+                    frontmatter = FrontmatterSerializer.serialize(document.frontmatter),
                     content = document.content,
                     content_hash = document.contentHash,
                     revision = document.revision.value,
@@ -75,7 +75,7 @@ internal class SqliteTransfer(
                 database.documentsQueries.update(
                     collection = document.collection.value,
                     path = document.path,
-                    frontmatter = FrontmatterCodec.serialize(document.frontmatter),
+                    frontmatter = FrontmatterSerializer.serialize(document.frontmatter),
                     content = document.content,
                     content_hash = document.contentHash,
                     revision = document.revision.value,
