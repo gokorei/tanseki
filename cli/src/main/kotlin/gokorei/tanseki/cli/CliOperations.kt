@@ -40,7 +40,7 @@ object CliOperations {
                 Reconciler(
                     composition.store,
                     composition.lookup,
-                    indexerOf(composition)
+                    CliWiring.indexerOf(composition)
                 )
             reconciler.reconcile()
         }
@@ -53,18 +53,9 @@ object CliOperations {
             FullRebuilder(
                 composition.store,
                 composition.lookup,
-                indexerOf(composition)
+                CliWiring.indexerOf(composition)
             ).rebuild(onProgress)
         }
-
-    /** The one Indexer wiring both reindex and rebuild share. */
-    private fun indexerOf(composition: Composition): Indexer =
-        Indexer(
-            store = composition.store,
-            lookup = composition.lookup,
-            embedder = composition.embedder,
-            vectorWriter = composition.vectorWriter
-        )
 
     /**
      * Reports indexing lag and pending size. Queries a running daemon over IPC
@@ -109,7 +100,7 @@ object CliOperations {
     /** Copy a vault into a SQLite library. */
     fun export(source: TansekiConfig, targetLibrary: Path): TransferReport =
         Compositions.open(source).use { from ->
-            Compositions.open(config(targetLibrary, Profile.LIBRARY)).use { to ->
+            Compositions.open(CliWiring.config(targetLibrary, Profile.LIBRARY)).use { to ->
                 ModeTransfer().copy(from.store, to.store)
             }
         }
@@ -119,7 +110,7 @@ object CliOperations {
         require(target.profile != Profile.DIRECTORY) {
             "directory profile is a read-only source and cannot be an import target"
         }
-        return Compositions.open(config(library, Profile.LIBRARY)).use { from ->
+        return Compositions.open(CliWiring.config(library, Profile.LIBRARY)).use { from ->
             Compositions.open(target).use { to ->
                 ModeTransfer().copy(from.store, to.store)
             }
@@ -160,20 +151,36 @@ object CliOperations {
         collection: Collection = Collection("vault")
     ): TransferReport =
         if (dryRun) {
-            importVaultDryRun(sourceDir, targetLibrary, collection)
+            CliWiring.importVaultDryRun(sourceDir, targetLibrary, collection)
         } else {
-            Compositions.open(config(targetLibrary, Profile.LIBRARY)).use { to ->
+            Compositions.open(CliWiring.config(targetLibrary, Profile.LIBRARY)).use { to ->
                 DirectoryImporter(collection = collection).copy(sourceDir, to.store)
             }
         }
+}
+
+/**
+ * Private plumbing for [CliOperations]: composition wiring and the
+ * import dry-run orchestration. Kept out of the operations object so the
+ * public operator surface stays under the function budget.
+ */
+private object CliWiring {
+    /** The one Indexer wiring both reindex and rebuild share. */
+    fun indexerOf(composition: Composition): Indexer =
+        Indexer(
+            store = composition.store,
+            lookup = composition.lookup,
+            embedder = composition.embedder,
+            vectorWriter = composition.vectorWriter
+        )
 
     /**
-     * The dry-run half of [importVault]: the same report with no writes. A
-     * fresh target leaves no database behind, and an existing target keeps its
-     * documents and their revisions. The lookup index is opened in a temporary
-     * directory so even derived state beside the target is untouched.
+     * The dry-run half of [CliOperations.importVault]: the same report with no
+     * writes. A fresh target leaves no database behind, and an existing target
+     * keeps its documents and their revisions. The lookup index is opened in a
+     * temporary directory so even derived state beside the target is untouched.
      */
-    private fun importVaultDryRun(
+    fun importVaultDryRun(
         sourceDir: Path,
         targetLibrary: Path,
         collection: Collection
@@ -192,20 +199,20 @@ object CliOperations {
      * scratch index so the run touches neither the library nor the derived
      * state beside it. SQLite reads do not modify the database file.
      */
-    private fun dryRunOnLibrary(
+    fun dryRunOnLibrary(
         sourceDir: Path,
         targetLibrary: Path,
         scratch: Path,
         collection: Collection
     ): TransferReport {
-        val config =
+        val libraryConfig =
             TansekiConfig(
                 profile = Profile.LIBRARY,
                 path = targetLibrary,
                 indexDir = scratch.resolve("index"),
                 logLevel = LogLevel.INFO
             )
-        Compositions.open(config).use { existing ->
+        Compositions.open(libraryConfig).use { existing ->
             return DirectoryImporter(collection = collection).copy(sourceDir, existing.store, dryRun = true)
         }
     }
@@ -215,20 +222,20 @@ object CliOperations {
      * the database the real run would create, and is deleted with the rest of
      * the scratch directory.
      */
-    private fun dryRunOnEmpty(sourceDir: Path, scratch: Path, collection: Collection): TransferReport {
-        val config =
+    fun dryRunOnEmpty(sourceDir: Path, scratch: Path, collection: Collection): TransferReport {
+        val emptyConfig =
             TansekiConfig(
                 profile = Profile.LIBRARY,
                 path = scratch.resolve("library.db"),
                 indexDir = scratch.resolve("index"),
                 logLevel = LogLevel.INFO
             )
-        Compositions.open(config).use { empty ->
+        Compositions.open(emptyConfig).use { empty ->
             return DirectoryImporter(collection = collection).copy(sourceDir, empty.store, dryRun = true)
         }
     }
 
-    private fun config(path: Path, profile: Profile): TansekiConfig =
+    fun config(path: Path, profile: Profile): TansekiConfig =
         TansekiConfig(
             profile = profile,
             path = path,
@@ -236,5 +243,5 @@ object CliOperations {
             logLevel = LogLevel.INFO
         )
 
-    private fun indexDirFor(path: Path): Path = path.resolveSibling("${path.fileName}.index")
+    fun indexDirFor(path: Path): Path = path.resolveSibling("${path.fileName}.index")
 }

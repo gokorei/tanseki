@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
 import kotlin.time.Instant
 
 /** Shared [Lookup] conformance suite for text search, filters, traversal, rebuild. */
-abstract class LookupContract {
+abstract class LookupMutationContract {
     protected abstract fun newLookup(): Lookup
 
     protected open fun closeLookup(lookup: Lookup) = Unit
@@ -37,24 +37,48 @@ abstract class LookupContract {
         lookupRef = null
     }
 
-    protected fun document(
-        id: String,
-        content: String,
-        collection: String = "vault",
-        tags: List<String> = emptyList(),
-        title: String? = null,
-        extra: Map<String, String> = emptyMap()
-    ) = Document(
-        id = DocId(id),
-        collection = Collection(collection),
-        path = "$id.md",
-        content = content,
-        contentHash = "hash-$id",
-        revision = RevisionId("rev"),
-        updatedAt = Instant.fromEpochSeconds(1_700_000_000),
-        frontmatter = Frontmatter(title = title, tags = tags, values = extra.mapValues { TextValue(it.value) })
-    )
+    @Test
+    @Suppress("FunctionNaming")
+    fun `remove drops the document`() {
+        lookup.index(document("a", "uniquetoken"), emptyList())
+        assertEquals(setOf(DocId("a")), lookup.indexedIds())
+        lookup.remove(DocId("a"))
+        assertTrue(lookup.searchText("uniquetoken", Filters(), 10).isEmpty())
+        assertEquals(emptySet<DocId>(), lookup.indexedIds())
+    }
 
+    @Test
+    @Suppress("FunctionNaming")
+    fun `remove drops outgoing and incoming edges`() {
+        lookup.index(document("a", "a"), listOf(Edge(DocId("a"), DocId("b"), RelTypes.LinksTo)))
+        lookup.index(document("b", "b"), emptyList())
+
+        lookup.remove(DocId("b"))
+
+        assertTrue(lookup.traverse(DocId("a"), RelTypes.LinksTo, 1).isEmpty())
+    }
+
+    @Test
+    @Suppress("FunctionNaming")
+    fun `rebuild recreates the index from the context store`() {
+        val store = InMemoryContextStore()
+        val doc = document("a", "rebuildme")
+        store.write(doc, "m", "tester")
+
+        lookup.rebuild(store)
+
+        assertEquals(listOf(DocId("a")), lookup.searchText("rebuildme", Filters(), 10).map { it.id })
+    }
+}
+
+/**
+ * Search, filter and traversal conformance for [Lookup].
+ *
+ * The mutation half (remove, rebuild) lives in [LookupMutationContract], which
+ * this extends, so every implementer still runs the whole suite: the split
+ * only keeps each contract under the function budget.
+ */
+abstract class LookupContract : LookupMutationContract() {
     @Test
     @Suppress("FunctionNaming")
     fun `text search finds the document`() {
@@ -115,37 +139,23 @@ abstract class LookupContract {
         assertEquals(listOf(DocId("b")), lookup.traverse(DocId("a"), RelTypes.Embeds, 1))
         assertTrue(lookup.traverse(DocId("a"), RelTypes.LinksTo, 1).isEmpty())
     }
-
-    @Test
-    @Suppress("FunctionNaming")
-    fun `remove drops the document`() {
-        lookup.index(document("a", "uniquetoken"), emptyList())
-        assertEquals(setOf(DocId("a")), lookup.indexedIds())
-        lookup.remove(DocId("a"))
-        assertTrue(lookup.searchText("uniquetoken", Filters(), 10).isEmpty())
-        assertEquals(emptySet<DocId>(), lookup.indexedIds())
-    }
-
-    @Test
-    @Suppress("FunctionNaming")
-    fun `remove drops outgoing and incoming edges`() {
-        lookup.index(document("a", "a"), listOf(Edge(DocId("a"), DocId("b"), RelTypes.LinksTo)))
-        lookup.index(document("b", "b"), emptyList())
-
-        lookup.remove(DocId("b"))
-
-        assertTrue(lookup.traverse(DocId("a"), RelTypes.LinksTo, 1).isEmpty())
-    }
-
-    @Test
-    @Suppress("FunctionNaming")
-    fun `rebuild recreates the index from the context store`() {
-        val store = InMemoryContextStore()
-        val doc = document("a", "rebuildme")
-        store.write(doc, "m", "tester")
-
-        lookup.rebuild(store)
-
-        assertEquals(listOf(DocId("a")), lookup.searchText("rebuildme", Filters(), 10).map { it.id })
-    }
 }
+
+/** One indexed document for the lookup conformance suites. */
+internal fun document(
+    id: String,
+    content: String,
+    collection: String = "vault",
+    tags: List<String> = emptyList(),
+    title: String? = null,
+    extra: Map<String, String> = emptyMap()
+) = Document(
+    id = DocId(id),
+    collection = Collection(collection),
+    path = "$id.md",
+    content = content,
+    contentHash = "hash-$id",
+    revision = RevisionId("rev"),
+    updatedAt = Instant.fromEpochSeconds(1_700_000_000),
+    frontmatter = Frontmatter(title = title, tags = tags, values = extra.mapValues { TextValue(it.value) })
+)

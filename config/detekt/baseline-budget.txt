@@ -10,17 +10,40 @@
 # TooManyFunctions: the new entries are the debt those rules had been hiding, and
 # the budget is pinned at that floor so it can only ratchet down.
 #
-# Current entries (32), by rule:
-#   - TooManyFunctions (30): god classes and wide contracts, owned by YM63VJCV.
-#     FileContextStore and SqliteContextStore are now thin facades (their LargeClass
-#     findings are gone); each still registers TooManyFunctions purely because the
-#     facade must implement both ContextStore and ProjectionOperationStore (~34
-#     one-line delegates), which the wide-contract budget explicitly tolerates.
+# Current entries (22), by rule:
+#   - TooManyFunctions (21). S868DGN5 cleared 9 by shrinking code, never by
+#     suppression: ProjectionWorker (dead private removed, retry delays moved to
+#     ProjectionRetryDelays), IdempotencyStore (expiry/eviction moved to
+#     IdempotencyEviction), LookupContract (mutation tests moved to
+#     LookupMutationContract, fixture to a shared function), SqliteSchema
+#     (raw driver probes moved to DriverProbes), IpcServer (frame codec moved to
+#     IpcFrameCodec, socket probes moved to IpcSocketProbes), CliOperations
+#     (wiring and dry-run orchestration moved to CliWiring), FrontmatterCodec
+#     (renderer moved to FrontmatterSerializer), McpToolArguments and
+#     StoreApiDtos (top-level functions split into cohesive files).
+#     What remains is either port width or future work:
+#     - port interfaces (2): ContextStore, ProjectionOperationStore. Splitting
+#       a port interface forks every adapter; the width is the contract.
+#     - store facades (4): FileContextStore, SqliteContextStore,
+#       PostgresContextStore, InMemoryContextStore. Each implements both
+#       ContextStore and ProjectionOperationStore (~34 one-line delegates),
+#       which the wide-contract budget explicitly tolerates.
+#     - testkit mirrors (4): ContextStoreContract,
+#       ContextStoreEdgeReplacementContract, ContextStoreListingContract,
+#       ContextStoreRetentionContract. Each mirrors the port it exercises, so
+#       the count tracks the contract it keeps honest.
+#     - adapter internals (4): LuceneLookup, MeiliLookup, HttpMcpStore,
+#       PijulCliClient. Private helpers behind narrow ports; extract when
+#       touched for behaviour, not for the metric alone.
+#     - service/app internals (7): OperationalMetrics, PendingOverlay,
+#       QueryFacade, StoreApi, StoreApiServer, TansekiMcpServer, VaultDaemon.
+#       Same rule as adapter internals: shrink on contact.
 #   - LargeClass (0): FileContextStore and SqliteContextStore both decomposed below
 #     the threshold; no class carries a suppressed/flagged LargeClass finding.
-#   - UnusedPrivateMember (1): tracked dead code
+#   - UnusedPrivateMember (0): the last tracked dead code
+#     (ProjectionWorker.processSafelyUnclaimed) was deleted by S868DGN5.
 #   - LoopWithTooManyJumpStatements (1): WhitespaceTokenizer
 #
 # Generated SDK sources are deliberately absent: `sdk/generated/**` skips the
 # convention plugin and is never analysed, so it must never be baselined.
-32
+22

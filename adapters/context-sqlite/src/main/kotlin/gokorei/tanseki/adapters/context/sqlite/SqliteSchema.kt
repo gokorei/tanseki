@@ -10,7 +10,7 @@ object SqliteSchema {
     fun create(driver: SqlDriver): TansekiDatabase {
         TansekiDatabase(driver).transaction {
             TansekiDatabase.Schema.create(driver)
-            setUserVersion(driver, version)
+            DriverProbes.setUserVersion(driver, version)
         }
         return TansekiDatabase(driver)
     }
@@ -22,7 +22,7 @@ object SqliteSchema {
         if (from < to) {
             TansekiDatabase(driver).transaction {
                 TansekiDatabase.Schema.migrate(driver, from, to)
-                setUserVersion(driver, to)
+                DriverProbes.setUserVersion(driver, to)
             }
         }
         return TansekiDatabase(driver)
@@ -41,9 +41,9 @@ object SqliteSchema {
      * its data.
      */
     fun ensure(driver: SqlDriver): TansekiDatabase {
-        if (!hasObject(driver, "table", "")) return create(driver)
+        if (!DriverProbes.hasObject(driver, "table", "")) return create(driver)
 
-        val schemaVersion = userVersion(driver)
+        val schemaVersion = DriverProbes.userVersion(driver)
         check(schemaVersion <= version) {
             "SQLite schema version $schemaVersion is newer than supported version $version"
         }
@@ -55,7 +55,7 @@ object SqliteSchema {
             upgradeLegacy(driver)
         }
 
-        val missingTables = REQUIRED_TABLES.filterNot { hasObject(driver, "table", it) }
+        val missingTables = REQUIRED_TABLES.filterNot { DriverProbes.hasObject(driver, "table", it) }
         check(missingTables.isEmpty()) {
             "SQLite schema is partial; missing tables: ${missingTables.joinToString()}"
         }
@@ -69,7 +69,7 @@ object SqliteSchema {
             "SQLite schema is partial; missing columns: ${missingColumns.joinToString()}"
         }
 
-        val missingIndexes = REQUIRED_INDEXES.filterNot { hasObject(driver, "index", it) }
+        val missingIndexes = REQUIRED_INDEXES.filterNot { DriverProbes.hasObject(driver, "index", it) }
         check(missingIndexes.isEmpty()) {
             "SQLite schema is partial; missing indexes: ${missingIndexes.joinToString()}"
         }
@@ -103,8 +103,8 @@ object SqliteSchema {
         )
         if (missingColumns(driver).isNotEmpty()) return
         TansekiDatabase(driver).transaction {
-            LEGACY_TABLES.forEach { ddl -> execute(driver, ddl) }
-            LEGACY_UPGRADES.forEach { statement -> execute(driver, statement) }
+            LEGACY_TABLES.forEach { ddl -> DriverProbes.execute(driver, ddl) }
+            LEGACY_UPGRADES.forEach { statement -> DriverProbes.execute(driver, statement) }
             addColumnIfMissing(
                 driver,
                 table = "projection_operations",
@@ -132,53 +132,43 @@ object SqliteSchema {
             }
             // Only after the lease column exists: an index on a column the table
             // does not have yet fails, and this runs before the stamp is written.
-            execute(
+            DriverProbes.execute(
                 driver,
                 "CREATE INDEX IF NOT EXISTS projection_operations_lease_idx " +
                     "ON projection_operations(lease_expires_at)"
             )
             ensureDocumentsPathIndex(driver)
-            if (missingObjects(driver).isEmpty()) setUserVersion(driver, version)
+            if (missingObjects(driver).isEmpty()) DriverProbes.setUserVersion(driver, version)
         }
     }
 
     private fun addColumnIfMissing(driver: SqlDriver, table: String, column: String, ddl: String) {
-        if (hasObject(driver, "table", table) && column !in columns(driver, table)) execute(driver, ddl)
+        if (
+            DriverProbes.hasObject(driver, "table", table) &&
+            column !in DriverProbes.columns(driver, table)
+        ) {
+            DriverProbes.execute(driver, ddl)
+        }
     }
 
     /** Columns the current schema needs that an existing table does not have. */
     private fun missingColumns(driver: SqlDriver): List<String> =
         REQUIRED_TABLES.flatMap { table ->
-            if (!hasObject(driver, "table", table)) {
+            if (!DriverProbes.hasObject(driver, "table", table)) {
                 emptyList()
             } else {
                 REQUIRED_COLUMNS
                     .getValue(table)
-                    .minus(columns(driver, table))
+                    .minus(DriverProbes.columns(driver, table))
                     .map { column -> "$table.$column" }
             }
         }
 
     /** Objects the current schema needs that the database does not have yet. */
     private fun missingObjects(driver: SqlDriver): List<String> =
-        REQUIRED_TABLES.filterNot { hasObject(driver, "table", it) } +
+        REQUIRED_TABLES.filterNot { DriverProbes.hasObject(driver, "table", it) } +
             missingColumns(driver) +
-            REQUIRED_INDEXES.filterNot { hasObject(driver, "index", it) }
-
-    private fun columns(driver: SqlDriver, table: String): Set<String> =
-        driver
-            .executeQuery(
-                identifier = null,
-                sql = "PRAGMA table_info($table)",
-                mapper = { cursor ->
-                    QueryResult.Value(
-                        buildSet {
-                            while (cursor.next().value) add(cursor.getString(1).orEmpty())
-                        }
-                    )
-                },
-                parameters = 0
-            ).value ?: emptySet()
+            REQUIRED_INDEXES.filterNot { DriverProbes.hasObject(driver, "index", it) }
 
     /**
      * Applies the concurrency pragmas a multi-writer library database needs:
@@ -191,8 +181,8 @@ object SqliteSchema {
      */
     fun configure(driver: SqlDriver, busyTimeoutMillis: Int = DEFAULT_BUSY_TIMEOUT_MILLIS) {
         require(busyTimeoutMillis >= 0) { "busyTimeoutMillis must not be negative" }
-        execute(driver, "PRAGMA busy_timeout = $busyTimeoutMillis")
-        execute(driver, "PRAGMA foreign_keys = ON")
+        DriverProbes.execute(driver, "PRAGMA busy_timeout = $busyTimeoutMillis")
+        DriverProbes.execute(driver, "PRAGMA foreign_keys = ON")
         val journal =
             driver
                 .executeQuery(
@@ -201,7 +191,7 @@ object SqliteSchema {
                     mapper = { cursor -> QueryResult.Value(if (cursor.next().value) cursor.getString(0) else null) },
                     parameters = 0
                 ).value
-        val inMemory = isInMemory(driver)
+        val inMemory = DriverProbes.isInMemory(driver)
         require(
             journal == null ||
                 inMemory ||
@@ -213,26 +203,8 @@ object SqliteSchema {
     }
 
     /** True when the main database has no backing file, i.e. it lives in memory. */
-    private fun isInMemory(driver: SqlDriver): Boolean =
-        driver
-            .executeQuery(
-                identifier = null,
-                sql = "PRAGMA database_list",
-                mapper = { cursor ->
-                    QueryResult.Value(
-                        buildList {
-                            while (cursor.next().value) {
-                                if (cursor.getString(1) == "main") add(cursor.getString(2).orEmpty())
-                            }
-                        }.firstOrNull()
-                    )
-                },
-                parameters = 0
-            ).value
-            ?.isBlank() != false
-
     private fun createUnmigratedTables(driver: SqlDriver) {
-        UNMIGRATED_TABLES.forEach { ddl -> execute(driver, ddl) }
+        UNMIGRATED_TABLES.forEach { ddl -> DriverProbes.execute(driver, ddl) }
     }
 
     /**
@@ -241,45 +213,7 @@ object SqliteSchema {
      * would otherwise hit the REQUIRED_INDEXES check without it.
      */
     private fun ensureDocumentsPathIndex(driver: SqlDriver) {
-        execute(driver, "CREATE INDEX IF NOT EXISTS documents_path_idx ON documents(path)")
-    }
-
-    private fun execute(driver: SqlDriver, sql: String) {
-        driver.execute(null, sql, 0) {}
-    }
-
-    private fun hasObject(driver: SqlDriver, type: String, name: String): Boolean {
-        val sql =
-            if (name.isBlank()) {
-                "SELECT 1 FROM sqlite_master LIMIT 1"
-            } else {
-                "SELECT 1 FROM sqlite_master WHERE type = '$type' AND name = '$name' LIMIT 1"
-            }
-        return driver
-            .executeQuery(
-                identifier = null,
-                sql = sql,
-                mapper = { cursor -> QueryResult.Value(cursor.next().value) },
-                parameters = 0
-            ).value
-    }
-
-    private fun userVersion(driver: SqlDriver): Long =
-        driver
-            .executeQuery(
-                identifier = null,
-                sql = "PRAGMA user_version",
-                mapper = { cursor ->
-                    cursor.next()
-                    QueryResult.Value(cursor.getLong(0))
-                },
-                parameters = 0
-            ).value
-            ?: 0L
-
-    private fun setUserVersion(driver: SqlDriver, value: Long) {
-        require(value >= 0) { "schema version must not be negative" }
-        execute(driver, "PRAGMA user_version = $value")
+        DriverProbes.execute(driver, "CREATE INDEX IF NOT EXISTS documents_path_idx ON documents(path)")
     }
 
     private const val DEFAULT_BUSY_TIMEOUT_MILLIS = 5_000
@@ -458,4 +392,85 @@ object SqliteSchema {
             ON projection_operations(dead_lettered, created_at, id)
             """.trimIndent()
         )
+}
+
+/**
+ * Raw driver reads and writes the schema orchestration above is built on.
+ *
+ * Every function here takes the driver explicitly and touches nothing else,
+ * so the SQL mechanics stay in one place while [SqliteSchema] keeps the
+ * open/migrate/ensure policy.
+ */
+private object DriverProbes {
+    fun execute(driver: SqlDriver, sql: String) {
+        driver.execute(null, sql, 0) {}
+    }
+
+    fun hasObject(driver: SqlDriver, type: String, name: String): Boolean {
+        val sql =
+            if (name.isBlank()) {
+                "SELECT 1 FROM sqlite_master LIMIT 1"
+            } else {
+                "SELECT 1 FROM sqlite_master WHERE type = '$type' AND name = '$name' LIMIT 1"
+            }
+        return driver
+            .executeQuery(
+                identifier = null,
+                sql = sql,
+                mapper = { cursor -> QueryResult.Value(cursor.next().value) },
+                parameters = 0
+            ).value
+    }
+
+    fun columns(driver: SqlDriver, table: String): Set<String> =
+        driver
+            .executeQuery(
+                identifier = null,
+                sql = "PRAGMA table_info($table)",
+                mapper = { cursor ->
+                    QueryResult.Value(
+                        buildSet {
+                            while (cursor.next().value) add(cursor.getString(1).orEmpty())
+                        }
+                    )
+                },
+                parameters = 0
+            ).value ?: emptySet()
+
+    /** True when the main database has no backing file, i.e. it lives in memory. */
+    fun isInMemory(driver: SqlDriver): Boolean =
+        driver
+            .executeQuery(
+                identifier = null,
+                sql = "PRAGMA database_list",
+                mapper = { cursor ->
+                    QueryResult.Value(
+                        buildList {
+                            while (cursor.next().value) {
+                                if (cursor.getString(1) == "main") add(cursor.getString(2).orEmpty())
+                            }
+                        }.firstOrNull()
+                    )
+                },
+                parameters = 0
+            ).value
+            ?.isBlank() != false
+
+    fun userVersion(driver: SqlDriver): Long =
+        driver
+            .executeQuery(
+                identifier = null,
+                sql = "PRAGMA user_version",
+                mapper = { cursor ->
+                    cursor.next()
+                    QueryResult.Value(cursor.getLong(0))
+                },
+                parameters = 0
+            ).value
+            ?: 0L
+
+    fun setUserVersion(driver: SqlDriver, value: Long) {
+        require(value >= 0) { "schema version must not be negative" }
+        execute(driver, "PRAGMA user_version = $value")
+    }
 }

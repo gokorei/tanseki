@@ -77,31 +77,20 @@ class ProjectionWorker(
     }
 
     /**
-     * When each operation may next be attempted, in memory.
-     *
-     * The durable record already counts attempts and dead-letters an exhausted
-     * budget; what it does not carry is *when* to try again. Without that, a
-     * failing operation is retried on every single drain — and once recovery runs
-     * on a timer rather than on writes, "every drain" becomes an unbounded hot
-     * retry against a dependency that is already known to be down.
-     *
-     * In memory, per process, on purpose: the cap is what matters for the hot-loop
-     * failure, and a restart resetting the delay is correct rather than lossy —
-     * the durable attempt count survives, so a poison operation still exhausts
-     * its budget across restarts instead of getting a free retry every time.
+     * In-memory "try again at" table for failed operations. See [ProjectionRetryDelays].
      */
-    private val retryAfter = LinkedHashMap<String, Instant>()
+    private val delays = ProjectionRetryDelays(retryBackoff, maxRetryBackoff)
     private val drainLock = Any()
 
     fun drain(limit: Int = 100): ProjectionWorkerReport =
         synchronized(drainLock) {
             val instant = now()
             val outbox = store.projectionOperations() ?: return ProjectionWorkerReport()
-            val fetchLimit = (limit.coerceAtLeast(0) + retryAfter.size).coerceAtLeast(100)
+            val fetchLimit = (limit.coerceAtLeast(0) + delays.pendingCount()).coerceAtLeast(100)
             val operations =
                 outbox
                     .pendingLive(fetchLimit)
-                    .filterNot { retryAfter[it.id]?.let { ready -> ready > instant } == true }
+                    .filterNot { delays.isDeferred(it.id, instant) }
                     .take(limit.coerceAtLeast(0))
             var attempted = 0
             var completed = 0
@@ -127,7 +116,7 @@ class ProjectionWorker(
                 val error = attempt.error
                 if (error == null) {
                     if (recordSuccess(operation, attempt.outcome, claim, indexed, removed)) {
-                        retryAfter.remove(operation.id)
+                        delays.clear(operation.id)
                         completed++
                     } else {
                         // The lease lapsed or was taken over mid-delivery. The index
@@ -144,10 +133,9 @@ class ProjectionWorker(
                     outbox.releaseClaim(claim)
                     if (recordFailure(operation, error)) {
                         deadLettered += operation
-                        retryAfter.remove(operation.id)
+                        delays.clear(operation.id)
                     } else {
-                        retryAfter[operation.id] = instant + backoffFor(operation)
-                        trimRetryAfter()
+                        delays.noteDelayed(operation, instant)
                     }
                 }
             }
@@ -164,30 +152,8 @@ class ProjectionWorker(
             )
         }
 
-    /**
-     * Exponential backoff from the operation's durable attempt count, capped.
-     *
-     * Keyed off the durable count rather than an in-memory tally so the delay
-     * grows across drains and across restarts, and so it cannot be reset by
-     * restarting the process.
-     */
-    private fun backoffFor(operation: ProjectionOperation): Duration {
-        if (retryBackoff == Duration.ZERO) return Duration.ZERO
-        val shift = (operation.attempts - 1).coerceIn(0, BACKOFF_SHIFT_CAP)
-        val scaled = retryBackoff * (1 shl shift)
-        return if (scaled > maxRetryBackoff) maxRetryBackoff else scaled
-    }
-
-    /** Keeps the delay table from growing without bound on a long-lived outbox. */
-    private fun trimRetryAfter() {
-        while (retryAfter.size > MAX_TRACKED_RETRIES) {
-            val oldest = retryAfter.keys.first()
-            retryAfter.remove(oldest)
-        }
-    }
-
     /** Operations currently waiting out a backoff delay, for metrics and tests. */
-    fun backingOff(): Set<String> = retryAfter.keys.toSet()
+    fun backingOff(): Set<String> = delays.backingOff()
 
     fun completeCurrent(documentId: DocId, contentHash: String): Int {
         val operations = store.projectionOperations() ?: return 0
@@ -212,12 +178,6 @@ class ProjectionWorker(
 
         fun defaultWorkerId(): String =
             "pid-" + ProcessHandle.current().pid()
-
-        /** Caps the shift so the multiplication cannot overflow a long. */
-        const val BACKOFF_SHIFT_CAP = 20
-
-        /** An outbox larger than this is not having its delays tracked. */
-        const val MAX_TRACKED_RETRIES = 10_000
     }
 
     /**
@@ -234,27 +194,19 @@ class ProjectionWorker(
         claim: ProjectionClaim
     ): ProcessAttempt =
         try {
-            if (!stillOwns(claim)) {
+            val owned =
+                claim.isLive(now()) &&
+                    store
+                        .projectionOperations()
+                        ?.leasedOperations(now())
+                        ?.any { it.token == claim.token } == true
+            if (!owned) {
                 ProcessAttempt(error = LeaseLostException(claim.operationId))
             } else {
                 ProcessAttempt(outcome = process(operation))
             }
         } catch (error: Exception) {
             ProcessAttempt(error = error)
-        }
-
-    private fun stillOwns(claim: ProjectionClaim): Boolean =
-        claim.isLive(now()) &&
-            store
-                .projectionOperations()
-                ?.leasedOperations(now())
-                ?.any { it.token == claim.token } == true
-
-    private fun processSafelyUnclaimed(operation: ProjectionOperation): ProcessAttempt =
-        try {
-            ProcessAttempt(outcome = process(operation))
-        } catch (error: Exception) {
-            ProcessAttempt(ProcessOutcome.STALE, error)
         }
 
     /**
@@ -385,5 +337,72 @@ class ProjectionWorker(
          * from a failure: the operation is complete, just with nothing to do.
          */
         NOOP
+    }
+}
+
+/**
+ * When each operation may next be attempted, in memory.
+ *
+ * The durable record already counts attempts and dead-letters an exhausted
+ * budget; what it does not carry is *when* to try again. Without that, a
+ * failing operation is retried on every single drain — and once recovery runs
+ * on a timer rather than on writes, "every drain" becomes an unbounded hot
+ * retry against a dependency that is already known to be down.
+ *
+ * In memory, per process, on purpose: the cap is what matters for the hot-loop
+ * failure, and a restart resetting the delay is correct rather than lossy —
+ * the durable attempt count survives, so a poison operation still exhausts
+ * its budget across restarts instead of getting a free retry every time.
+ */
+private class ProjectionRetryDelays(
+    private val retryBackoff: Duration,
+    private val maxRetryBackoff: Duration
+) {
+    private val retryAfter = LinkedHashMap<String, Instant>()
+
+    fun pendingCount(): Int = retryAfter.size
+
+    fun isDeferred(id: String, now: Instant): Boolean =
+        retryAfter[id]?.let { ready -> ready > now } == true
+
+    fun noteDelayed(operation: ProjectionOperation, now: Instant) {
+        retryAfter[operation.id] = now + backoffFor(operation)
+        trim()
+    }
+
+    fun clear(id: String) {
+        retryAfter.remove(id)
+    }
+
+    fun backingOff(): Set<String> = retryAfter.keys.toSet()
+
+    /**
+     * Exponential backoff from the operation's durable attempt count, capped.
+     *
+     * Keyed off the durable count rather than an in-memory tally so the delay
+     * grows across drains and across restarts, and so it cannot be reset by
+     * restarting the process.
+     */
+    private fun backoffFor(operation: ProjectionOperation): Duration {
+        if (retryBackoff == Duration.ZERO) return Duration.ZERO
+        val shift = (operation.attempts - 1).coerceIn(0, BACKOFF_SHIFT_CAP)
+        val scaled = retryBackoff * (1 shl shift)
+        return if (scaled > maxRetryBackoff) maxRetryBackoff else scaled
+    }
+
+    /** Keeps the delay table from growing without bound on a long-lived outbox. */
+    private fun trim() {
+        while (retryAfter.size > MAX_TRACKED_RETRIES) {
+            val oldest = retryAfter.keys.first()
+            retryAfter.remove(oldest)
+        }
+    }
+
+    private companion object {
+        /** Caps the shift so the multiplication cannot overflow a long. */
+        const val BACKOFF_SHIFT_CAP = 20
+
+        /** An outbox larger than this is not having its delays tracked. */
+        const val MAX_TRACKED_RETRIES = 10_000
     }
 }

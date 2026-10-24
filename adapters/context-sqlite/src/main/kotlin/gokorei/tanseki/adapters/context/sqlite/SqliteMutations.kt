@@ -11,7 +11,7 @@ import gokorei.tanseki.core.domain.Revision
 import gokorei.tanseki.core.domain.RevisionId
 import gokorei.tanseki.core.domain.documentPath
 import gokorei.tanseki.core.ports.Clock
-import gokorei.tanseki.core.text.FrontmatterCodec
+import gokorei.tanseki.core.text.FrontmatterSerializer
 import gokorei.tanseki.core.text.LinkResolver
 import gokorei.tanseki.core.text.WikilinkRewriter
 import kotlin.time.Instant
@@ -57,7 +57,7 @@ internal class SqliteMutations(
                     id = doc.id.value,
                     collection = doc.collection.value,
                     path = doc.path,
-                    frontmatter = FrontmatterCodec.serialize(doc.frontmatter),
+                    frontmatter = FrontmatterSerializer.serialize(doc.frontmatter),
                     content = doc.content,
                     content_hash = doc.contentHash,
                     revision = doc.revision.value,
@@ -75,7 +75,7 @@ internal class SqliteMutations(
                 database.documentsQueries.update(
                     collection = doc.collection.value,
                     path = doc.path,
-                    frontmatter = FrontmatterCodec.serialize(doc.frontmatter),
+                    frontmatter = FrontmatterSerializer.serialize(doc.frontmatter),
                     content = doc.content,
                     content_hash = doc.contentHash,
                     revision = doc.revision.value,

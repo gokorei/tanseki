@@ -43,7 +43,7 @@ class ObsidianParityTest {
         assertEquals(emptyList<String>(), MarkdownParser.parse("body").frontmatter.aliases)
 
         val serialized =
-            FrontmatterCodec.serialize(
+            FrontmatterSerializer.serialize(
                 MarkdownParser.parse("---\naliases:\n  - Foo\n---\nbody").frontmatter
             )
         assertEquals(

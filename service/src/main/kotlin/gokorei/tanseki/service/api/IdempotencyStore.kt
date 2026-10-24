@@ -35,16 +35,7 @@ class IdempotencyStore(
     private val ttl: Duration = 24.hours,
     private val clock: Clock = Clock.System
 ) {
-    private data class Entry(
-        val fingerprint: String,
-        val token: String,
-        val response: StoredResponse?,
-        val storedAt: Long
-    ) {
-        val active: Boolean get() = response == null
-    }
-
-    private val entries = ConcurrentHashMap<String, Entry>()
+    private val entries = ConcurrentHashMap<String, IdempotencyStoreEntry>()
     private val capacityLock = ReentrantLock()
     private val published = capacityLock.newCondition()
 
@@ -57,19 +48,19 @@ class IdempotencyStore(
         capacityLock.lock()
         try {
             val now = clock.now().toEpochMilliseconds()
-            purgeExpired(now)
+            eviction.purgeExpired(entries, now)
             val held = entries[key]
-            if (held != null && !expired(held, now)) return classify(held, fingerprint)
-            if (entries.size >= maxEntries && !evictOneCompleted()) {
+            if (held != null && !eviction.expired(held, now)) return classify(held, fingerprint)
+            if (entries.size >= maxEntries && !eviction.evictOneCompleted(entries)) {
                 return IdempotencyReservation.Conflict("Idempotency store is at capacity; retry the request")
             }
             var reservation: IdempotencyReservation =
                 IdempotencyReservation.Conflict("Idempotency-Key could not be reserved")
             entries.compute(key) { _, current ->
-                if (current == null || expired(current, now)) {
+                if (current == null || eviction.expired(current, now)) {
                     val token = UUID.randomUUID().toString()
                     reservation = IdempotencyReservation.Acquired(token)
-                    Entry(fingerprint, token, response = null, storedAt = now)
+                    IdempotencyStoreEntry(fingerprint, token, response = null, storedAt = now)
                 } else {
                     reservation = classify(current, fingerprint)
                     current
@@ -81,7 +72,7 @@ class IdempotencyStore(
         }
     }
 
-    private fun classify(existing: Entry, fingerprint: String): IdempotencyReservation =
+    private fun classify(existing: IdempotencyStoreEntry, fingerprint: String): IdempotencyReservation =
         when {
             existing.fingerprint != fingerprint -> {
                 IdempotencyReservation.Conflict("Idempotency-Key is already bound to a different request")
@@ -118,7 +109,7 @@ class IdempotencyStore(
                 val existing = entries[key]
                 val remaining = deadline - System.nanoTime()
                 when {
-                    existing == null || expired(existing, now) -> {
+                    existing == null || eviction.expired(existing, now) -> {
                         waiting = false
                     }
 
@@ -155,7 +146,11 @@ class IdempotencyStore(
         capacityLock.withLock {
             val now = clock.now().toEpochMilliseconds()
             val existing = entries[key]
-            if (existing == null || expired(existing, now)) null else classify(existing, fingerprint)
+            if (existing == null || eviction.expired(existing, now)) {
+                null
+            } else {
+                classify(existing, fingerprint)
+            }
         }
 
     fun complete(
@@ -168,7 +163,7 @@ class IdempotencyStore(
             val completed =
                 entries
                     .compute(key) { _, existing ->
-                        if (existing == null || expired(existing, clock.now().toEpochMilliseconds())) {
+                        if (existing == null || eviction.expired(existing, clock.now().toEpochMilliseconds())) {
                             null
                         } else if (
                             existing.fingerprint == fingerprint &&
@@ -204,7 +199,7 @@ class IdempotencyStore(
 
     fun get(key: String): StoredResponse? {
         val entry = entries[key] ?: return null
-        if (expired(entry, clock.now().toEpochMilliseconds())) {
+        if (eviction.expired(entry, clock.now().toEpochMilliseconds())) {
             entries.remove(key, entry)
             return null
         }
@@ -214,11 +209,11 @@ class IdempotencyStore(
     fun put(key: String, response: StoredResponse) {
         capacityLock.withLock {
             val now = clock.now().toEpochMilliseconds()
-            purgeExpired(now)
-            check(entries.size < maxEntries || evictOneCompleted(exclude = key)) {
+            eviction.purgeExpired(entries, now)
+            check(entries.size < maxEntries || eviction.evictOneCompleted(entries, exclude = key)) {
                 "Idempotency store is at capacity"
             }
-            entries[key] = Entry("legacy", "legacy", response, now)
+            entries[key] = IdempotencyStoreEntry("legacy", "legacy", response, now)
         }
     }
 
@@ -232,9 +227,39 @@ class IdempotencyStore(
         const val POLL_INTERVAL_NANOS = 50_000_000L
     }
 
-    private fun expired(entry: Entry, now: Long): Boolean = now - entry.storedAt > ttl.inWholeMilliseconds
+    private val eviction = IdempotencyEviction(maxEntries, ttl)
+}
 
-    private fun purgeExpired(now: Long) {
+/**
+ * One idempotency record: the fingerprint the key is bound to, the token of
+ * the in-flight holder, the replayable response (once complete), and when it
+ * was stored for TTL expiry.
+ */
+private data class IdempotencyStoreEntry(
+    val fingerprint: String,
+    val token: String,
+    val response: StoredResponse?,
+    val storedAt: Long
+) {
+    val active: Boolean get() = response == null
+}
+
+/**
+ * TTL expiry and capacity eviction for [IdempotencyStore].
+ *
+ * The store itself owns reservation fairness (the lock, the condition, the
+ * reserve/complete/release handshake); this owns only the question of which
+ * entries may be dropped. An in-flight reservation is never evicted: its
+ * holder could no longer publish the response, which would lose the write.
+ */
+private class IdempotencyEviction(
+    private val maxEntries: Int,
+    private val ttl: Duration
+) {
+    fun expired(entry: IdempotencyStoreEntry, now: Long): Boolean =
+        now - entry.storedAt > ttl.inWholeMilliseconds
+
+    fun purgeExpired(entries: MutableMap<String, IdempotencyStoreEntry>, now: Long) {
         entries.entries.removeIf { expired(it.value, now) }
     }
 
@@ -243,7 +268,10 @@ class IdempotencyStore(
      * never dropped: its holder could no longer publish (or release) the
      * response, which would lose the write and strand the caller's retry.
      */
-    private fun evictOneCompleted(exclude: String? = null): Boolean {
+    fun evictOneCompleted(
+        entries: MutableMap<String, IdempotencyStoreEntry>,
+        exclude: String? = null
+    ): Boolean {
         val victim =
             entries
                 .entries

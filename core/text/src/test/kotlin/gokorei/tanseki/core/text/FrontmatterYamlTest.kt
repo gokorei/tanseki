@@ -113,13 +113,13 @@ class FrontmatterYamlTest {
         val original =
             Frontmatter(values = mapOf("files" to SequenceValue(listOf(TextValue("a.py"), TextValue("b.py")))))
 
-        val reparsed = FrontmatterCodec.parse(FrontmatterCodec.serialize(original))
+        val reparsed = FrontmatterCodec.parse(FrontmatterSerializer.serialize(original))
 
         assertEquals(original, reparsed)
         // And the rendered form is the block style a person would have written.
         assertTrue(
-            FrontmatterCodec.serialize(original).contains("files:\n  - a.py\n  - b.py"),
-            FrontmatterCodec.serialize(original)
+            FrontmatterSerializer.serialize(original).contains("files:\n  - a.py\n  - b.py"),
+            FrontmatterSerializer.serialize(original)
         )
     }
 
@@ -139,7 +139,7 @@ class FrontmatterYamlTest {
                     )
             )
 
-        assertEquals(original, FrontmatterCodec.parse(FrontmatterCodec.serialize(original)))
+        assertEquals(original, FrontmatterCodec.parse(FrontmatterSerializer.serialize(original)))
     }
 
     @Test
@@ -244,7 +244,7 @@ class FrontmatterYamlTest {
     @Test
     fun `a contract key cannot be shadowed by a value`() {
         assertThrows(IllegalArgumentException::class.java) {
-            FrontmatterCodec.serialize(Frontmatter(values = mapOf("title" to TextValue("x"))))
+            FrontmatterSerializer.serialize(Frontmatter(values = mapOf("title" to TextValue("x"))))
         }
     }
 }

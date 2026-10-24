@@ -34,6 +34,7 @@ import gokorei.tanseki.core.ports.TransferState
 import gokorei.tanseki.core.ports.importDocument
 import gokorei.tanseki.core.ports.isStaleTransfer
 import gokorei.tanseki.core.text.FrontmatterCodec
+import gokorei.tanseki.core.text.FrontmatterSerializer
 import gokorei.tanseki.core.text.LinkResolver
 import gokorei.tanseki.core.text.WikilinkRewriter
 import java.sql.Connection
@@ -120,7 +121,7 @@ class PostgresContextStore(
                         statement.setString(1, doc.id.value)
                         statement.setString(2, doc.collection.value)
                         statement.setString(3, doc.path)
-                        statement.setString(4, FrontmatterCodec.serialize(doc.frontmatter))
+                        statement.setString(4, FrontmatterSerializer.serialize(doc.frontmatter))
                         statement.setString(5, doc.content)
                         statement.setString(6, doc.contentHash)
                         statement.setString(7, doc.revision.value)
@@ -1015,7 +1016,7 @@ class PostgresContextStore(
                         statement.setString(1, document.id.value)
                         statement.setString(2, document.collection.value)
                         statement.setString(3, document.path)
-                        statement.setString(4, FrontmatterCodec.serialize(document.frontmatter))
+                        statement.setString(4, FrontmatterSerializer.serialize(document.frontmatter))
                         statement.setString(5, document.content)
                         statement.setString(6, document.contentHash)
                         statement.setString(7, document.revision.value)
